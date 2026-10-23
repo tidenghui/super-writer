@@ -128,22 +128,6 @@
     "importance": 3
   },
   {
-    "id": "g2-1",
-    "text": "老周指过的县志第三排第四格缺第六册、账册柜、律例匣，这三处分别藏着什么。",
-    "plantedAt": 2,
-    "dueBy": 6,
-    "paidAt": null,
-    "importance": 3
-  },
-  {
-    "id": "g2-2",
-    "text": "沈砚把带自己笔迹的纸屑含在舌下，并重新推开东窗，他要做什么。",
-    "plantedAt": 2,
-    "dueBy": 5,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
     "id": "g3-1",
     "text": "《引气篇》底本第七行那一笔在沈砚用笔尖描时自行前移半寸，这一笔的来历和自行移动的原因是什么。",
     "plantedAt": 3,
@@ -158,5 +142,21 @@
     "dueBy": 12,
     "paidAt": null,
     "importance": 3
+  },
+  {
+    "id": "g2-1",
+    "text": "老周指过的县志第三排第四格缺第六册、账册柜、律例匣，这三处分别藏着什么。",
+    "plantedAt": 2,
+    "dueBy": 6,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g2-2",
+    "text": "沈砚把带自己笔迹的纸屑含在舌下，并重新推开东窗，他要做什么。",
+    "plantedAt": 2,
+    "dueBy": 5,
+    "paidAt": null,
+    "importance": 2
   }
 ]
