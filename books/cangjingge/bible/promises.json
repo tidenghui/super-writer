@@ -44,7 +44,7 @@
     "text": "阿满说有人在书上写字，写的是谁的名字",
     "plantedAt": 5,
     "dueBy": 12,
-    "paidAt": null,
+    "paidAt": 5,
     "importance": 2
   },
   {
@@ -80,50 +80,82 @@
     "importance": 2
   },
   {
-    "id": "g1-1",
-    "text": "父亲那行血字后半截糊住的内容，以及“别让”后面是什么。",
-    "plantedAt": 1,
-    "dueBy": 16,
-    "paidAt": null,
-    "importance": 3
-  },
-  {
-    "id": "g1-2",
-    "text": "门外传来三下一样重的脚步声，来人不是老周，是谁？",
-    "plantedAt": 1,
-    "dueBy": 3,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
-    "id": "g2-1",
-    "text": "老周指县志第三排第四格（缺第六册）、账册柜、律例匣，这三处分别指什么。",
-    "plantedAt": 2,
-    "dueBy": 5,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
-    "id": "g2-2",
-    "text": "老周说“那行字早晚得有人写”，那行字是给谁留的。",
-    "plantedAt": 2,
-    "dueBy": 4,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
-    "id": "g3-1",
-    "text": "主角丹田内散成七个清晰字“秋七月，他还活着”意味着什么。",
-    "plantedAt": 3,
+    "id": "g5-1",
+    "text": "穿灰人是谁、晒书台为何把缺了三年的县志第六册当废本让人抄、抄完收回去做什么。",
+    "plantedAt": 5,
     "dueBy": 12,
     "paidAt": null,
     "importance": 2
   },
   {
-    "id": "g3-2",
+    "id": "g5-2",
+    "text": "抄本最后一页那个淡字“沈砚”是谁写的、为何会湿凉消失。",
+    "plantedAt": 5,
+    "dueBy": 10,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g1-1",
+    "text": "门外传来三下一样重的脚步声，来人不是老周，是谁？",
+    "plantedAt": 1,
+    "dueBy": 6,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g1-2",
+    "text": "父亲那行血字后半截糊住的内容，以及“别让”后面是什么。",
+    "plantedAt": 1,
+    "dueBy": 16,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g3-1",
     "text": "《引气篇》底本第七行那一笔是谁写的（笔迹与主角相同但主角未动笔），以及该页为何被换过。",
     "plantedAt": 3,
     "dueBy": 10,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g3-2",
+    "text": "主角丹田内散成七个清晰字“秋七月，他还活着”意味着什么。",
+    "plantedAt": 3,
+    "dueBy": 12,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g4-1",
+    "text": "七天前主角抄完十二页却无记忆、未领墨，那十二页抄的是什么，是谁用油烟墨代签了“沈砚”。",
+    "plantedAt": 4,
+    "dueBy": 10,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g4-2",
+    "text": "账册上“内库出”三字意味着什么，内库与朱砂、空册的大量出库有何关联。",
+    "plantedAt": 4,
+    "dueBy": 12,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g2-1",
+    "text": "老周指过的县志第三排第四格缺第六册、账册柜、律例匣，这三处分别藏着什么。",
+    "plantedAt": 2,
+    "dueBy": 6,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g2-2",
+    "text": "沈砚把带自己笔迹的纸屑含在舌下，并重新推开东窗，他要做什么。",
+    "plantedAt": 2,
+    "dueBy": 5,
     "paidAt": null,
     "importance": 2
   }

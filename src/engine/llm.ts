@@ -101,7 +101,8 @@ export async function callLLM(opts: CallOpts): Promise<CallResult> {
       });
 
       if (!res.ok) {
-        const errText = await res.text().catch(() => '');
+        const errText =
+          (await res.text().catch(() => '')) || res.statusText || '（服务器未返回错误详情）';
         const retryable = res.status === 429 || res.status >= 500;
         if (retryable && attempt < 3) {
           await sleep(1000 * 2 ** (attempt - 1));

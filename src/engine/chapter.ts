@@ -14,6 +14,7 @@ import {
   factsBrief,
   styleRules,
   bookTitle,
+  recentEndings,
 } from './context.ts';
 import { runAllCritics, type Critique, type Defect } from './critics.ts';
 import { runColdReaders, tally, type ColdReadResult } from './coldRead.ts';
@@ -41,6 +42,8 @@ interface Scene {
   conflict: string;
   turn: string;
   exit: string;
+  /** 这个场景要写多少字。整章只给一个总目标，模型分配不出来，只能写短。 */
+  wordTarget?: number;
 }
 
 interface ChapterPlan {
@@ -52,6 +55,8 @@ interface ChapterPlan {
   endHook: string;
   wordTarget: number;
   mustNot: string[];
+  /** 本章还不了的债，明确推到期。不许让账本永远红着。 */
+  defer?: Array<{ id: string; dueBy: number }>;
 }
 
 export interface ChapterResult {
@@ -109,14 +114,15 @@ ${beat.pay?.length ? `需要在这一章回收的伏笔：${beat.pay.join('、')
 {
   "title": "章标题，四个字以内最好",
   "scenes": [
-    { "location": "...", "cast": ["角色id"], "goal": "...", "conflict": "...", "turn": "...", "exit": "怎么过渡到下一场景" }
+    { "location": "...", "cast": ["角色id"], "goal": "...", "conflict": "...", "turn": "...", "exit": "怎么过渡到下一场景", "wordTarget": 850 }
   ],
   "openingLine": "...",
   "plant": ["p1"],
   "pay": ["p2"],
   "endHook": "...",
   "wordTarget": 2600,
-  "mustNot": ["...", "...", "..."]
+  "mustNot": ["...", "...", "..."],
+  "defer": [{ "id": "g1-2", "dueBy": 8 }]
 }
 
 角色 id 只能用：${book.bible.characters.map((c) => c.id).join('、')}`,
@@ -244,11 +250,12 @@ ${styleRules(book)}
 
   const user = [
     progressBrief(book, n),
-    `## 本章场景表（按顺序写，不要跳）`,
+    recentEndings(book, n),
+    `## 本章场景表（按顺序写，不要跳；括号里是这个场景的字数配额，必须写够）`,
     plan.scenes
       .map(
         (s, i) =>
-          `${i + 1}. 【${s.location}】出场：${s.cast.join('、')}\n   目标：${s.goal}\n   冲突：${s.conflict}\n   转折：${s.turn}\n   收束：${s.exit}`,
+          `${i + 1}. 【${s.location}】（约 ${s.wordTarget ?? 850} 字）出场：${s.cast.join('、')}\n   目标：${s.goal}\n   冲突：${s.conflict}\n   转折：${s.turn}\n   收束：${s.exit}`,
       )
       .join('\n\n'),
     `## 人物（口吻必须能区分开）`,
@@ -256,7 +263,7 @@ ${styleRules(book)}
     `## 已经写好的开头（从这里接着写，一字不改地用它）`,
     opening,
     `## 硬要求`,
-    `- 全章 ${plan.wordTarget} 字左右（上下浮动 300 字）。`,
+    `- 全章 ${plan.wordTarget} 字左右（不得少于 ${Math.round(plan.wordTarget * 0.9)} 字）。每个场景按上面给的配额写，写不够就加动作和物件细节，不要加新情节。`,
     `- 章末最后一句要达成这个意图：${plan.endHook}`,
     `- 这一章绝对不能出现：${plan.mustNot.join('；')}`,
     `- 只写场景表里的事件。不要新增情节、人物、物件——包括结尾不要多写一段。`,
@@ -280,7 +287,7 @@ ${styleRules(book)}
 
 async function expandIfShort(book: BookHandle, n: number, body: string, target: number): Promise<string> {
   const len = countChars(body);
-  if (len >= target * 0.7) return body;
+  if (len >= target * 0.9) return body;
   log('起草', `只有 ${len} 字，偏短，补写一次`);
 
   const res = await callLLM({
@@ -738,6 +745,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
 export async function finalize(book: BookHandle, result: ChapterResult): Promise<ChapterMeta> {
   const { n, body, plan, critiques, coldRead: cold, revisions } = result;
   const costAtStart = spendSoFar().totalCny - result.costCny;
+  const deferred: string[] = [];
 
   log('归档', '沉淀设定与伏笔…');
   const update = await recordCanon(book, n, plan.title, body);
@@ -759,6 +767,15 @@ export async function finalize(book: BookHandle, result: ChapterResult): Promise
       importance: np.importance,
     });
   });
+
+  // 规划阶段申报的延期
+  for (const d of plan.defer ?? []) {
+    const target = promises.find((x) => x.id === d.id);
+    if (target && d.dueBy > target.dueBy) {
+      target.dueBy = d.dueBy;
+      deferred.push(`${d.id} → 第${d.dueBy}章`);
+    }
+  }
 
   const facts: Fact[] = update.newFacts.map((f, i) => ({
     id: `f${n}-${i + 1}`,
@@ -794,6 +811,8 @@ export async function finalize(book: BookHandle, result: ChapterResult): Promise
   } else {
     log('归档', 'mock 模式：不写盘（要写盘设 SW_MOCK_SAVE=1）');
   }
+
+  if (deferred.length) log('归档', `延期：${deferred.join('、')}`);
 
   result.costCny = chapterMeta.costCny ?? result.costCny;
 
@@ -849,6 +868,61 @@ export async function runWithCandidates(
 
   await finalize(book, winner);
   return winner;
+}
+
+/**
+ * 人工批注修订。
+ *
+ * 引擎再牛也会有看不出问题的时候。这条通道把「编辑说一句、机器改一处」
+ * 变成可复现的操作，而不是只有某个人记得自己手改过。
+ */
+export async function fixChapter(
+  bookSlug: string,
+  n: number,
+  note: string,
+): Promise<{ applied: number; skipped: number; before: number; after: number }> {
+  const book = loadBook(bookSlug);
+  const ch = loadChapter(bookSlug, n);
+  if (!ch) throw new Error(`没有第 ${n} 章`);
+
+  const before = countChars(ch.body);
+
+  const res = await callLLM({
+    role: 'reviser',
+    system: `你是《${bookTitle(book)}》的修订编辑，正在执行一条人工批注。
+
+${styleRules(book)}
+
+铁律：
+- 只改批注指出的地方，其余一个字都不要动。
+- find 必须是正文里逐字存在、且只出现一次的片段。
+- replace 保持原意和长度量级。
+- 如果批注要求的事情做不到（比如会和其他段落冲突），输出空数组。`,
+    user: [
+      `## 正文 · 第${n}章《${ch.meta.title}》`,
+      ch.body,
+      `## 人工批注`,
+      note,
+      `## 输出`,
+      `只输出 JSON：{"patches":[{"find":"原文片段","replace":"改后片段"}]}`,
+    ].join('\n\n---\n\n'),
+    json: true,
+    maxTokens: 8000,
+    label: `fix:${n}`,
+  });
+
+  const patches = extractJson<{ patches: Patch[] }>(res.text).patches ?? [];
+  const r = applyPatches(ch.body, patches);
+
+  if (r.applied > 0) {
+    saveChapter(bookSlug, n, ch.meta.title, r.body, {
+      ...ch.meta,
+      costCny: ch.meta.costCny,
+    });
+  }
+
+  const after = countChars(r.body);
+  return { applied: r.applied, skipped: r.skipped, before, after };
 }
 
 /**

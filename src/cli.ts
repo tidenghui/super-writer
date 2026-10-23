@@ -2,7 +2,7 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadEnv, ROOT, runsDir, resolveRole, checkCriticDiversity } from './engine/config.ts';
-import { runChapter, runWithCandidates, recanonChapter } from './engine/chapter.ts';
+import { runChapter, runWithCandidates, recanonChapter, fixChapter } from './engine/chapter.ts';
 import { enableCallLog } from './engine/util.ts';
 import { callLLM } from './engine/llm.ts';
 import { extractJson } from './engine/json.ts';
@@ -107,6 +107,26 @@ async function cmdChapter(): Promise<void> {
   if (has('print')) console.log('\n' + '─'.repeat(60) + '\n' + res.body);
 }
 
+async function cmdFix(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const n = Number(flag('n'));
+  const note = flag('m');
+  if (!n) throw new Error('缺 --n <章号>');
+  if (!note) throw new Error('缺 --m "<批注>"');
+
+  const dir = resolve(runsDir(slug), `fix-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  const r = await fixChapter(slug, n, note);
+  console.log(
+    `\n  第 ${n} 章：应用 ${r.applied} 处，跳过 ${r.skipped} 处　${r.before} → ${r.after} 字\n`,
+  );
+  if (r.applied > 0) {
+    console.log('  记得跑一次 recanon 对齐事实表：npm run recanon -- --n ' + n + '\n');
+  }
+}
+
 async function cmdRecanon(): Promise<void> {
   const slug = flag('book') ?? 'cangjingge';
   const n = Number(flag('n'));
@@ -191,13 +211,14 @@ async function auditBook(slug: string): Promise<DriftReport> {
       `## 全书正文`,
       text,
       `## 输出`,
+      `只输出 JSON，不要解释，不要 Markdown 代码块。drift 最多 6 条，挑最要命的：`,
       `{
   "drift": [{"kind":"口吻|设定|事实|伏笔|重复","where":"第X章","quote":"原文","problem":"...","fix":"..."}],
   "biggestRisk": "如果只修一处，最该修哪里"
 }`,
     ].join('\n\n---\n\n'),
     json: true,
-    maxTokens: 12000,
+    maxTokens: 16000,
     label: 'audit',
   });
 
@@ -275,6 +296,7 @@ function help(): void {
     npm run doctor [--ping]                     检查环境和 API key（--ping 真实调一次）
     npm run chapter -- --n 1 [--book slug]      生成一章
     npm run canon   [--book slug]               看看故事圣经和伏笔账本
+    npm run fix     -- --n 3 -m "批注"          按人工批注定点修订一章
     npm run recanon -- --n 1                    从定稿正文重算某章的事实与伏笔
     npm run audit   [--book slug]               全书漂移审计
     npm run night   [--book slug]               夜班：审计 + 写下一章（给 crontab 用）
@@ -298,6 +320,8 @@ async function main(): Promise<void> {
       return cmdCanon();
     case 'recanon':
       return cmdRecanon();
+    case 'fix':
+      return cmdFix();
     case 'audit':
       return cmdAudit();
     case 'night':

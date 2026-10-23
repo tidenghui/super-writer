@@ -93,6 +93,23 @@ export function progressBrief(book: BookHandle, n: number): string {
   return parts.join('\n\n');
 }
 
+/**
+ * 最近几章是怎么收尾的。
+ * 连载写作最容易犯的错不是写差，是每章用同一招收尾——
+ * 读者到第五章就腻了，而且说不出哪里腻。
+ */
+export function recentEndings(book: BookHandle, n: number, count = 3): string {
+  const lines: string[] = [];
+  for (let i = Math.max(1, n - count); i < n; i++) {
+    const ch = loadChapter(book.slug, i);
+    if (!ch) continue;
+    const tail = ch.body.trim().split(/\n{2,}/).slice(-2).join(' ');
+    lines.push(`- 第${i}章结尾：……${tail.slice(-80)}`);
+  }
+  if (lines.length === 0) return '';
+  return `## 最近几章是怎么收尾的（这一章不许用同样的方式）\n${lines.join('\n')}`;
+}
+
 export function promiseBrief(book: BookHandle, n: number): string {
   const all = book.bible.promises;
   const open = openPromises(all, n);

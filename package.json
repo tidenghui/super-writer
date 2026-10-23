@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "read": "tsx src/serve/server.ts",
     "night": "tsx src/cli.ts night",
-    "recanon": "tsx src/cli.ts recanon"
+    "recanon": "tsx src/cli.ts recanon",
+    "fix": "tsx src/cli.ts fix"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
