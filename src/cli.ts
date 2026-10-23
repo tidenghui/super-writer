@@ -200,9 +200,17 @@ async function cmdCompare(): Promise<void> {
   }
 
   const ranked = [...wins.entries()].sort((x, y) => y[1] - x[1]);
-  console.log('\n  开头排名（胜场）');
-  for (const [n, w] of ranked) console.log(`    第 ${n} 章　${w} 胜`);
-  console.log('');
+  const best = ranked[0]?.[1] ?? 0;
+
+  console.log('\n  开头排名（胜场，满分 ' + (chapters.length - 1) * 3 + '）');
+  for (const [n, w] of ranked) {
+    const noise = best - w <= 2 ? ' \x1b[2m(与榜首差距在噪声范围内)\x1b[0m' : '';
+    console.log(`    第 ${n} 章　${w} 胜${noise}`);
+  }
+  console.log(
+    '\n  \x1b[2m每对只投 3 票，单次排名的噪声约 ±3 胜。' +
+      '只可信榜首和榜尾，中间的名次别当真；要可靠排序需多跑几轮取中位数。\x1b[0m\n',
+  );
 }
 
 async function cmdCalibrate(): Promise<void> {

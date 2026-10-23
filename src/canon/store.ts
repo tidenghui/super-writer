@@ -45,6 +45,8 @@ export interface ChapterBeat {
   plant?: string[];
   pay?: string[];
   newFacts?: string[];
+  /** 故事内的第几天（从 0 起）。有倒计时的书用它驱动节奏。 */
+  day?: number;
 }
 
 export interface Outline {

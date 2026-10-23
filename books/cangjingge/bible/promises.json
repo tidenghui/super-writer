@@ -80,54 +80,6 @@
     "importance": 2
   },
   {
-    "id": "g5-1",
-    "text": "穿灰人是谁、晒书台为何把缺了三年的县志第六册当废本让人抄、抄完收回去做什么。",
-    "plantedAt": 5,
-    "dueBy": 12,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
-    "id": "g5-2",
-    "text": "抄本最后一页那个淡字“沈砚”是谁写的、为何会湿凉消失。",
-    "plantedAt": 5,
-    "dueBy": 10,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
-    "id": "g1-1",
-    "text": "门外传来三下一样重的脚步声，来人不是老周，是谁？",
-    "plantedAt": 1,
-    "dueBy": 6,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
-    "id": "g1-2",
-    "text": "父亲那行血字后半截糊住的内容，以及“别让”后面是什么。",
-    "plantedAt": 1,
-    "dueBy": 16,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
-    "id": "g4-1",
-    "text": "七天前主角抄完十二页却无记忆、未领墨，那十二页抄的是什么，是谁用油烟墨代签了“沈砚”。",
-    "plantedAt": 4,
-    "dueBy": 10,
-    "paidAt": null,
-    "importance": 3
-  },
-  {
-    "id": "g4-2",
-    "text": "账册上“内库出”三字意味着什么，内库与朱砂、空册的大量出库有何关联。",
-    "plantedAt": 4,
-    "dueBy": 12,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
     "id": "g2-1",
     "text": "老周指过的县志第三排第四格缺第六册、账册柜、律例匣，这三处分别藏着什么。",
     "plantedAt": 2,
@@ -158,5 +110,53 @@
     "dueBy": 12,
     "paidAt": null,
     "importance": 2
+  },
+  {
+    "id": "g5-1",
+    "text": "阿满指根下“别”字后面两个被汗洇糊的字是什么，尤其最后一个轮廓像“我”的字。",
+    "plantedAt": 5,
+    "dueBy": 10,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g5-2",
+    "text": "那个拿阿满手写“沈砚”并留下墨痕的不认得的人是谁，他为何要阿满记住。",
+    "plantedAt": 5,
+    "dueBy": 12,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g1-1",
+    "text": "门外传来三下一样重的脚步声，来人不是老周，是谁？",
+    "plantedAt": 1,
+    "dueBy": 6,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g1-2",
+    "text": "父亲那行血字后半截糊住的内容，以及“别让”后面是什么。",
+    "plantedAt": 1,
+    "dueBy": 16,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g4-1",
+    "text": "账册上“七月十六”空名格留给谁，那一夜将发生什么。",
+    "plantedAt": 4,
+    "dueBy": 18,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g4-2",
+    "text": "沈砚领墨记档三年全空，账册却记他抄十二页用油烟墨，是谁代签、那十二页内容为何。",
+    "plantedAt": 4,
+    "dueBy": 10,
+    "paidAt": null,
+    "importance": 3
   }
 ]

@@ -45,6 +45,10 @@ interface Scene {
   exit: string;
   /** 这个场景要写多少字。整章只给一个总目标，模型分配不出来，只能写短。 */
   wordTarget?: number;
+  /** 他失败会失去什么。没有代价的场景就是流水账。 */
+  stake?: string;
+  /** 谁或什么在阻止他拿到。必须是外部的、具体的。 */
+  obstacle?: string;
 }
 
 interface ChapterPlan {
@@ -78,7 +82,7 @@ const log = (stage: string, msg: string) => console.log(`  \x1b[2m${stage}\x1b[0
 // 阶段 1：规划
 // ─────────────────────────────────────────────────────────────
 
-async function planChapter(book: BookHandle, n: number): Promise<ChapterPlan> {
+async function planChapter(book: BookHandle, n: number, fixes?: string[]): Promise<ChapterPlan> {
   const beat = beatFor(book, n);
 
   const system = `你是《${bookTitle(book)}》这本书的策划。你不写正文，你只决定这一章要发生什么。
@@ -94,6 +98,9 @@ ${styleRules(book)}`;
     progressBrief(book, n),
     promiseBrief(book, n),
     factsBrief(book, n),
+    beat.day !== undefined
+      ? `## 时间锚点\n今天是第 ${beat.day} 天，距定名还有 ${7 - beat.day} 天。\n这一章的正文里必须出现一个具体的时间信号（剩余天数、更漏、天色、或者别人提起那个日子），让读者始终感到期限在逼近。`
+      : '',
     `## 第 ${n} 章的大纲（必须落实，不许改主线）
 标题（暂定）：${beat.title}
 这一章存在的理由：${beat.purpose}
@@ -115,7 +122,7 @@ ${beat.pay?.length ? `需要在这一章回收的伏笔：${beat.pay.join('、')
 {
   "title": "章标题，四个字以内最好",
   "scenes": [
-    { "location": "...", "cast": ["角色id"], "goal": "...", "conflict": "...", "turn": "...", "exit": "怎么过渡到下一场景", "wordTarget": 850 }
+    { "location": "...", "cast": ["角色id"], "goal": "...", "obstacle": "谁/什么在拦着他", "stake": "失败会失去什么", "conflict": "...", "turn": "...", "exit": "怎么过渡到下一场景", "wordTarget": 850 }
   ],
   "openingLine": "...",
   "plant": ["p1"],
@@ -143,6 +150,46 @@ ${beat.pay?.length ? `需要在这一章回收的伏笔：${beat.pay.join('、')
   const plan = extractJson<ChapterPlan>(res.text);
   if (!plan.scenes?.length) throw new Error('规划阶段没有产出场景，输出异常');
   return plan;
+}
+
+/**
+ * 规划复审。
+ *
+ * 在花钱起草之前，先问一句：这三个场景里，有没有哪一个是「他去做了，做成了」的流水账。
+ * 场景没有阻力，写手就只能让人物站着说话——实测第四、五章就是这么水掉的。
+ */
+async function reviewPlan(
+  book: BookHandle,
+  n: number,
+  plan: ChapterPlan,
+): Promise<{ ok: boolean; issues: string[] }> {
+  const res = await callLLM({
+    role: 'showrunner',
+    system: `你是这本书的主编。你只审一件事：这份场景表里，有没有哪一场是流水账。
+
+流水账的判定：主角想要什么，去了，就拿到了。中间没有人拦，没有时间压迫，没有失败的可能。
+
+${bookBriefing(book)}`,
+    user: [
+      `## 第 ${n} 章的场景表`,
+      plan.scenes
+        .map(
+          (s, i) =>
+            `${i + 1}. 【${s.location}】目标：${s.goal}\n   阻力：${s.obstacle ?? '（未填）'}\n   代价：${s.stake ?? '（未填）'}\n   转折：${s.turn}`,
+        )
+        .join('\n\n'),
+      `## 输出`,
+      `只输出 JSON：{"ok": true 或 false, "issues": ["问题一", "问题二"]}`,
+      `ok 为 false 的条件：有任何一个场景缺阻力、缺代价，或者阻力是「他心里犹豫」这种内部状态。`,
+      `issues 最多 3 条，直接说哪一场要改、改成什么。`,
+    ].join('\n\n---\n\n'),
+    json: true,
+    maxTokens: 1500,
+    label: `plan-review:${n}`,
+  });
+
+  const raw = extractJson<{ ok?: boolean; issues?: string[] }>(res.text);
+  return { ok: raw.ok === true, issues: raw.issues ?? [] };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -256,7 +303,7 @@ ${styleRules(book)}
     plan.scenes
       .map(
         (s, i) =>
-          `${i + 1}. 【${s.location}】（约 ${s.wordTarget ?? 850} 字）出场：${s.cast.join('、')}\n   目标：${s.goal}\n   冲突：${s.conflict}\n   转折：${s.turn}\n   收束：${s.exit}`,
+          `${i + 1}. 【${s.location}】（约 ${s.wordTarget ?? 850} 字）出场：${s.cast.join('、')}\n   目标：${s.goal}\n   阻力：${s.obstacle ?? '（未填）'}\n   代价：${s.stake ?? '（未填）'}\n   冲突：${s.conflict}\n   转折：${s.turn}\n   收束：${s.exit}`,
       )
       .join('\n\n'),
     `## 人物（口吻必须能区分开）`,
@@ -634,7 +681,17 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
   );
 
   log('规划', '拆场景…');
-  const plan = await planChapter(book, n);
+  let plan = await planChapter(book, n);
+
+  const review = await reviewPlan(book, n, plan);
+  if (!review.ok) {
+    log('规划', `\x1b[33m主编打回：${review.issues[0] ?? '有流水账场景'}\x1b[0m`);
+    for (const i of review.issues.slice(1)) log('规划', `　　　　${i}`);
+    plan = await planChapter(book, n, review.issues);
+    log('规划', `重排后：${plan.scenes.length} 个场景`);
+  } else {
+    log('规划', '主编通过');
+  }
   log('规划', `${plan.scenes.length} 个场景｜${plan.scenes.map((s) => s.location).join(' → ')}`);
 
   log('开场', '生成候选…');
