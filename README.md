@@ -9,6 +9,9 @@
 ## 现在跑起来
 
 ```bash
+# 0. 依赖（首次）
+npm install
+
 # 1. 填 API key
 cp .env.example .env.local
 #    编辑 .env.local，写入 DEEPSEEK_API_KEY
@@ -21,6 +24,16 @@ npm run chapter -- --n 1 --print
 
 # 4. 看看这本书现在什么样
 npm run canon
+
+# 5. 打开阅读器
+npm run read          # → http://127.0.0.1:8787
+```
+
+**没有 API key 也想跑通全流程？** 用离线 mock：
+
+```bash
+SW_MOCK=1 npm run chapter -- --n 1              # 演练，不花钱不写盘
+SW_MOCK=1 SW_MOCK_STRICT=1 npm run chapter -- --n 1  # 强制走一遍修订循环
 ```
 
 > 注意：本机 `node` 在 `/opt/homebrew/bin`，如果你的 shell 里找不到 node，先
@@ -70,6 +83,18 @@ runs/<slug>/<时间>/     每次运行的完整日志（含所有 prompt）
 | 归档 | canonRecorder | 沉淀事实、还债、记新债、写摘要 |
 
 **关键设计**：批评家必须**逐字引用原文**才能提意见。引用在正文里找不到的缺陷会被自动作废——这是防止模型"编造问题"的唯一有效手段。
+
+## 阅读器
+
+```bash
+npm run read     # http://127.0.0.1:8787
+```
+
+零依赖、服务端渲染、文件即数据库。没有构建步骤，没有前端框架——一章三千字，用户要的是「打开就能读」。
+
+- 目录页只显示 `accepted` 的章节；`?draft=1` 可以预览草稿
+- `?theme=dark` / `?theme=light` 强制主题（调试用）
+- 字号三档、昼夜切换、按键 ← → 翻页、阅读位置记忆
 
 ## 成本
 

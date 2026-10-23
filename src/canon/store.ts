@@ -219,3 +219,23 @@ export function summaryIndex(metas: ChapterMeta[], upTo: number): string {
     .map((m) => `第${m.n}章《${m.title}》：${m.summary}`)
     .join('\n');
 }
+
+// ─────────────────────────────────────────────────────────────
+// 书的元信息（阅读器用；引擎不依赖它）
+// ─────────────────────────────────────────────────────────────
+
+export interface BookInfo {
+  title: string;
+  tagline?: string;
+  genre?: string;
+  author?: string;
+  status?: string;
+  synopsis?: string;
+}
+
+export function loadBookInfo(slug: string): BookInfo {
+  const p = resolve(bookDir(slug), 'book.json');
+  if (!existsSync(p)) return { title: slug };
+  const raw = readJson<Partial<BookInfo>>(p);
+  return { title: raw.title ?? slug, ...raw };
+}

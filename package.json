@@ -12,7 +12,8 @@
     "audit": "tsx src/cli.ts audit",
     "canon": "tsx src/cli.ts canon",
     "doctor": "tsx src/cli.ts doctor",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "read": "tsx src/serve/server.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
