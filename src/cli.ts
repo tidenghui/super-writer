@@ -2,7 +2,8 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadEnv, ROOT, runsDir, resolveRole, checkCriticDiversity } from './engine/config.ts';
-import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapter } from './engine/chapter.ts';
+import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapter, polishChapter } from './engine/chapter.ts';
+import { runAllCritics } from './engine/critics.ts';
 import { runColdReaders, firstScreenAll, comparePair } from './engine/coldRead.ts';
 import { readFileSync } from 'node:fs';
 import { enableCallLog } from './engine/util.ts';
@@ -136,6 +137,53 @@ async function cmdFix(): Promise<void> {
  * 每次换模型、改提示词之后跑一次：烂稿必须被拒绝，真稿必须被接受。
  * 如果哪天烂稿也能拿 3/3，说明这套判据已经失效了。
  */
+/** 只打分，不改稿——用来做前后对比 */
+async function cmdScore(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const book = loadBook(slug);
+  const metas = listChapterMetas(slug).filter((m) => m.status === 'accepted');
+  const targets = has('all') ? metas.map((m) => m.n) : [Number(flag('n') ?? metas[0]?.n)];
+
+  const dir = resolve(runsDir(slug), `score-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  for (const n of targets) {
+    if (!n) continue;
+    const ch = loadChapter(slug, n);
+    if (!ch) continue;
+    const run = await runAllCritics(book, n, ch.body);
+    const avg = run.ok.reduce((x, c) => x + c.score, 0) / Math.max(1, run.ok.length);
+    const hard = run.ok.flatMap((c) => c.defects).filter((d) => d.severity === 'blocker').length;
+    console.log(
+      `  第 ${n} 章　${run.ok.map((c) => c.score).join('｜')}　均分 ${avg.toFixed(2)}　blocker ${hard}`,
+    );
+  }
+  console.log('');
+}
+
+/** 段落级打磨：只重写最弱的几段，原稿也可以赢 */
+async function cmdPolish(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const metas = listChapterMetas(slug).filter((m) => m.status === 'accepted');
+  const targets = has('all') ? metas.map((m) => m.n) : [Number(flag('n') ?? metas[0]?.n)];
+
+  const dir = resolve(runsDir(slug), `polish-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  for (const n of targets) {
+    if (!n) continue;
+    console.log(`\n  第 ${n} 章`);
+    const r = await polishChapter(slug, n, Number(flag('paras') ?? 3));
+    for (const p of r.picked) {
+      console.log(`    ${p.kept ? '\x1b[2m保留原稿\x1b[0m' : '\x1b[32m已替换\x1b[0m'}　${p.why}`);
+    }
+    console.log(`    ${r.before} → ${r.after} 字`);
+  }
+  console.log('');
+}
+
 /** 首屏测试：只看开头 300 字，会不会继续滑 */
 async function cmdFirstScreen(): Promise<void> {
   const slug = flag('book') ?? 'cangjingge';
@@ -447,6 +495,8 @@ function help(): void {
     npm run canon   [--book slug]               看看故事圣经和伏笔账本
     npm run firstscreen [--n 1 | --all]         首屏测试：只看开头 320 字
     npm run compare                             两两对比，给各章开头排名
+    npm run score   [--n 1 | --all]             只打分不改稿，做前后对比
+    npm run polish  [--n 1 | --all] [--paras 3] 段落级打磨
     npm run calibrate                           标定读者分身：烂稿必须被拒绝
     npm run reread  [--n 1 | --all]             重跑读者测（不改正文）
     npm run fix     -- --n 3 --m "批注"          按人工批注定点修订一章
@@ -481,6 +531,10 @@ async function main(): Promise<void> {
       return cmdFirstScreen();
     case 'compare':
       return cmdCompare();
+    case 'score':
+      return cmdScore();
+    case 'polish':
+      return cmdPolish();
     case 'fix':
       return cmdFix();
     case 'audit':

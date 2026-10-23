@@ -20,7 +20,9 @@
     "reread": "tsx src/cli.ts reread",
     "calibrate": "tsx src/cli.ts calibrate",
     "firstscreen": "tsx src/cli.ts firstscreen",
-    "compare": "tsx src/cli.ts compare"
+    "compare": "tsx src/cli.ts compare",
+    "score": "tsx src/cli.ts score",
+    "polish": "tsx src/cli.ts polish"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

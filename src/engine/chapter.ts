@@ -1015,6 +1015,141 @@ export async function rereadChapter(bookSlug: string, n: number): Promise<ColdRe
   return run.ok;
 }
 
+// ─────────────────────────────────────────────────────────────
+// 段落级打磨
+// ─────────────────────────────────────────────────────────────
+
+interface WeakPara {
+  quote: string;
+  why: string;
+}
+
+/**
+ * 只重写最弱的几段。
+ *
+ * 整章重写一定会改坏（实测过）。段落级不一样：只动一段，上下文不变，
+ * 而且候选里包含原稿——裁判可以选「原稿更好」，最坏情况是不变。
+ */
+export async function polishChapter(
+  bookSlug: string,
+  n: number,
+  count = 3,
+): Promise<{ picked: Array<{ why: string; kept: boolean }>; before: number; after: number }> {
+  const book = loadBook(bookSlug);
+  const ch = loadChapter(bookSlug, n);
+  if (!ch) throw new Error(`没有第 ${n} 章`);
+
+  const before = ch.body;
+  let body = ch.body;
+
+  const pick = await callLLM({
+    role: 'critic',
+    system: `你是这本书的责任编辑。你只挑段落，不改写。
+
+你知道什么叫「不往前走的句子」：它只是在描写，没有提供新信息，也没有制造紧张。
+
+${styleRules(book)}`,
+    user: [
+      `## 正文`,
+      body,
+      `## 任务`,
+      `挑出最弱的 ${count} 个段落。标准：删掉它，读者不会损失任何信息或情绪。`,
+      `优先挑「氛围描写多于事件」的段落，不要挑对话。`,
+      `只输出 JSON：{"weak":[{"quote":"逐字复制的整段","why":"为什么它不往前走"}]}`,
+    ].join('\n\n---\n\n'),
+    json: true,
+    maxTokens: 2000,
+    label: `polish-pick:${n}`,
+  });
+
+  const weak = (extractJson<{ weak?: WeakPara[] }>(pick.text).weak ?? []).filter((w) =>
+    body.includes(w.quote.trim()),
+  );
+
+  const results: Array<{ why: string; kept: boolean }> = [];
+
+  for (const w of weak) {
+    const original = w.quote.trim();
+
+    const alts = await mapLimit([0, 1, 2], 3, async (i) => {
+      const r = await callLLM({
+        role: 'writer',
+        system: `你是《${bookTitle(book)}》的作者，正在打磨一个段落。
+
+${styleRules(book)}`,
+        user: [
+          `## 上下文（这一段前后的内容）`,
+          excerptAround(body, original),
+          `## 要重写的段落`,
+          original,
+          `## 任务`,
+          `重写这一段，第 ${i + 1} 个版本，换一种写法。要求：`,
+          `- 保留它承担的信息和情绪，一个字都不许丢`,
+          `- 长度与原文相当（±20%）`,
+          `- 让它往前推：增加具体的动作、可数的细节、或一个小的转折`,
+          `- 不要加新情节、新人物`,
+          `只输出这一段的新写法，不要解释。`,
+        ].join('\n\n---\n\n'),
+        maxTokens: 1200,
+        label: `polish-alt:${n}:${i}`,
+        temperatureOverride: 1.0,
+      });
+      return r.text.trim();
+    });
+
+    const judge = await callLLM({
+      role: 'critic',
+      system: '你是极其挑剔的中文小说编辑。你只做一件事：从几个版本里选最好的那一个。',
+      user: [
+        `## 上下文`,
+        excerptAround(body, original),
+        `## 候选`,
+        [original, ...alts].map((t, i) => `### 候选 ${i}${i === 0 ? '（原稿）' : ''}\n${t}`).join('\n\n'),
+        `## 判断标准`,
+        `1. 有没有往前推（新信息或新紧张）`,
+        `2. 声音是否和上下文一致`,
+        `3. 有没有套话、有没有直接命名情绪`,
+        `原稿如果是最好的一版，就选 0。`,
+        `只输出 JSON：{"winner": 0-${alts.length}, "why":"一句话"}`,
+      ].join('\n\n---\n\n'),
+      json: true,
+      maxTokens: 400,
+      label: `polish-judge:${n}`,
+    });
+
+    const { winner, why } = extractJson<{ winner: number; why: string }>(judge.text);
+    const idx = Math.max(0, Math.min(alts.length, winner ?? 0));
+
+    if (idx === 0) {
+      results.push({ why: `原稿更好：${why ?? ''}`, kept: true });
+      continue;
+    }
+
+    const replacement = alts[idx - 1]!;
+    const applied = applyPatches(body, [{ find: original, replace: replacement }]);
+    if (applied.applied === 1) {
+      body = applied.body;
+      results.push({ why: why ?? '', kept: false });
+    } else {
+      results.push({ why: '替换失败（原文不唯一）', kept: true });
+    }
+  }
+
+  if (body !== before) {
+    saveChapter(bookSlug, n, ch.meta.title, body, { ...ch.meta });
+  }
+
+  return { picked: results, before: countChars(before), after: countChars(body) };
+}
+
+function excerptAround(body: string, quote: string, span = 260): string {
+  const i = body.indexOf(quote);
+  if (i === -1) return body.slice(0, span);
+  const start = Math.max(0, i - span);
+  const end = Math.min(body.length, i + quote.length + span);
+  return `${start > 0 ? '……' : ''}${body.slice(start, end)}${end < body.length ? '……' : ''}`;
+}
+
 /**
  * 从已定稿的正文重算一章的派生数据（事实、伏笔、摘要）。
  * 用途：账本被脏数据污染之后重新对齐；或者手动改过正文。
