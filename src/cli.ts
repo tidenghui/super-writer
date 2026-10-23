@@ -5,6 +5,7 @@ import { loadEnv, ROOT, runsDir, resolveRole, checkCriticDiversity } from './eng
 import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapter, polishChapter, runMany } from './engine/chapter.ts';
 import { runAllCritics } from './engine/critics.ts';
 import { runColdReaders, firstScreenAll, comparePair } from './engine/coldRead.ts';
+import { isMock } from './engine/mock.ts';
 import { readFileSync } from 'node:fs';
 import { enableCallLog } from './engine/util.ts';
 import { callLLM } from './engine/llm.ts';
@@ -39,6 +40,15 @@ function runId(): string {
 
 async function doctor(): Promise<void> {
   console.log('\n检查环境\n');
+
+  if (isMock()) {
+    const books = listBooks();
+    console.log(`  模式        \x1b[33mmock（离线演练，不需要 API key）\x1b[0m`);
+    console.log(`  项目根目录  ${ROOT}`);
+    console.log(`  找到的书    ${books.length ? books.join('、') : '（无）'}`);
+    console.log('\n  \x1b[32m可以跑。\x1b[0m 试试：SW_MOCK=1 npm run chapter -- --n 1\n');
+    return;
+  }
 
   const books = listBooks();
   console.log(`  项目根目录  ${ROOT}`);
