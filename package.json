@@ -1,0 +1,25 @@
+{
+  "name": "super-writer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "无人值守的中文连载小说创作引擎",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "chapter": "tsx src/cli.ts chapter",
+    "audit": "tsx src/cli.ts audit",
+    "canon": "tsx src/cli.ts canon",
+    "doctor": "tsx src/cli.ts doctor",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  }
+}
