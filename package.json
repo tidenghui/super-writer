@@ -13,7 +13,8 @@
     "canon": "tsx src/cli.ts canon",
     "doctor": "tsx src/cli.ts doctor",
     "typecheck": "tsc --noEmit",
-    "read": "tsx src/serve/server.ts"
+    "read": "tsx src/serve/server.ts",
+    "night": "tsx src/cli.ts night"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

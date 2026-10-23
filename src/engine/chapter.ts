@@ -215,6 +215,7 @@ async function draft(
   n: number,
   plan: ChapterPlan,
   opening: string,
+  temperature?: number,
 ): Promise<string> {
   const castIds = [...new Set(plan.scenes.flatMap((s) => s.cast))];
 
@@ -257,6 +258,7 @@ ${styleRules(book)}
     user,
     maxTokens: 8000,
     label: `draft:${n}`,
+    ...(temperature !== undefined ? { temperatureOverride: temperature } : {}),
   });
 
   return res.text.trim();
@@ -363,15 +365,19 @@ function avgScore(critiques: Critique[]): number {
   return critiques.reduce((s, c) => s + c.score, 0) / critiques.length;
 }
 
-function gate(critiques: Critique[], cold: ColdReadResult[]): { pass: boolean; why: string } {
+function gate(
+  critiques: Critique[],
+  cold: ColdReadResult[],
+  minVotes: number,
+): { pass: boolean; why: string } {
   const score = avgScore(critiques);
   const hard = blockers(critiques);
   const votes = cold.filter((r) => r.willContinue).length;
 
   if (hard.length > 0) return { pass: false, why: `有 ${hard.length} 处硬伤（blocker）` };
   if (score < 7.5) return { pass: false, why: `平均分 ${score.toFixed(1)} < 7.5` };
-  if (votes < Math.ceil(cold.length * 0.66))
-    return { pass: false, why: `冷读 ${votes}/${cold.length} 愿意继续，不够` };
+  if (votes < minVotes)
+    return { pass: false, why: `冷读 ${votes}/${cold.length} 愿意继续，要求至少 ${minVotes}` };
   return { pass: true, why: `平均分 ${score.toFixed(1)}，冷读 ${votes}/${cold.length}` };
 }
 
@@ -430,28 +436,59 @@ export interface RunOptions {
   bookSlug: string;
   n: number;
   maxRevisions?: number;
-  /** 只要达到这个冷读票数就放行，用于调试 */
-  coldReadOverride?: number;
+  /** 只出稿不落盘，供「跑多版挑最好」用 */
+  persist?: boolean;
+  /** 变体序号：让多次生成之间产生差异 */
+  variant?: number;
+}
+
+export interface ChapterProfile {
+  golden: boolean;
+  openings: number;
+  maxRevisions: number;
+  minColdVotes: number;
+}
+
+/**
+ * 算力偏心：前三章是一本书的生死线。
+ * 第 1 章留不住人，后面写得多好都没人知道——所以前 3 章配 8 个开场候选、3 轮修订、要求 3/3 冷读全票。
+ */
+export function profileFor(n: number): ChapterProfile {
+  const golden = n <= 3;
+  return {
+    golden,
+    openings: golden ? 8 : 4,
+    maxRevisions: golden ? 3 : 2,
+    minColdVotes: golden ? 3 : 2,
+  };
 }
 
 export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
   const book = loadBook(opts.bookSlug);
   const n = opts.n;
-  const maxRevisions = opts.maxRevisions ?? 2;
+  const profile = profileFor(n);
+  const maxRevisions = opts.maxRevisions ?? profile.maxRevisions;
+  const variant = opts.variant ?? 0;
+  // 变体之间靠温度拉开差异：0.9 / 0.95 / 1.0 …
+  const temperature = 0.9 + variant * 0.05;
   const costAtStart = spendSoFar().totalCny;
 
-  console.log(`\n\x1b[1m第 ${n} 章\x1b[0m · ${book.bible.outline.chapters.find((c) => c.n === n)?.title ?? ''}\n`);
+  console.log(
+    `\n\x1b[1m第 ${n} 章\x1b[0m · ${book.bible.outline.chapters.find((c) => c.n === n)?.title ?? ''}` +
+      `${profile.golden ? '\x1b[33m（黄金三章档：开场×' + profile.openings + '，修订×' + maxRevisions + '）\x1b[0m' : ''}` +
+      `${variant ? `　变体 ${variant + 1}` : ''}\n`,
+  );
 
   log('规划', '拆场景…');
   const plan = await planChapter(book, n);
   log('规划', `${plan.scenes.length} 个场景｜${plan.scenes.map((s) => s.location).join(' → ')}`);
 
   log('开场', '生成候选…');
-  const { opening, why } = await chooseOpening(book, n, plan);
+  const { opening, why } = await chooseOpening(book, n, plan, profile.openings);
   log('开场', why);
 
   log('起草', `目标 ${plan.wordTarget} 字…`);
-  let body = await draft(book, n, plan, opening);
+  let body = await draft(book, n, plan, opening, temperature);
   body = await expandIfShort(book, n, body, plan.wordTarget);
   log('起草', `初稿 ${countChars(body)} 字`);
 
@@ -472,7 +509,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
     const score = avgScore(critiques);
     if (score > best.score) best = { body, score, critiques, cold };
 
-    verdict = gate(critiques, cold);
+    verdict = gate(critiques, cold, profile.minColdVotes);
     log(
       '审稿',
       critiques.map((c) => `${c.critic} ${c.score}`).join('｜') +
@@ -493,6 +530,44 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
   critiques = final.critiques;
   cold = final.cold;
 
+  if (opts.persist === false) {
+    return {
+      n,
+      title: plan.title,
+      body,
+      plan,
+      critiques,
+      coldRead: cold,
+      revisions,
+      costCny: Number((spendSoFar().totalCny - costAtStart).toFixed(3)),
+      accepted: verdict.pass,
+    };
+  }
+
+  const result: ChapterResult = {
+    n,
+    title: plan.title,
+    body,
+    plan,
+    critiques,
+    coldRead: cold,
+    revisions,
+    costCny: Number((spendSoFar().totalCny - costAtStart).toFixed(3)),
+    accepted: verdict.pass,
+  };
+
+  await finalize(book, result);
+  return result;
+}
+
+/**
+ * 把一章的产物沉淀回这本书：还债、记事实、写摘要、落盘。
+ * 独立出来，是因为「跑多版挑最好」需要先比完再落盘。
+ */
+export async function finalize(book: BookHandle, result: ChapterResult): Promise<ChapterMeta> {
+  const { n, body, plan, critiques, coldRead: cold, revisions } = result;
+  const costAtStart = spendSoFar().totalCny - result.costCny;
+
   log('归档', '沉淀设定与伏笔…');
   const update = await recordCanon(book, n, plan.title, body);
 
@@ -512,6 +587,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
       importance: np.importance,
     });
   }
+
   const facts: Fact[] = update.newFacts.map((f, i) => ({
     id: `f${n}-${i + 1}`,
     chapter: n,
@@ -522,7 +598,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
   const chapterMeta: ChapterMeta = {
     n,
     title: plan.title,
-    status: verdict.pass ? 'accepted' : 'draft',
+    status: result.accepted ? 'accepted' : 'draft',
     wordCount: countChars(body),
     summary: update.summary,
     coldRead: tally(cold),
@@ -547,21 +623,60 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
     log('归档', 'mock 模式：不写盘（要写盘设 SW_MOCK_SAVE=1）');
   }
 
+  result.costCny = chapterMeta.costCny ?? result.costCny;
+
   console.log(
     `\n  ${persist ? '存盘' : '演练'}：第${n}章《${plan.title}》　${chapterMeta.wordCount} 字　¥${chapterMeta.costCny}\n`,
   );
 
-  return {
-    n,
-    title: plan.title,
-    body,
-    plan,
-    critiques,
-    coldRead: cold,
-    revisions,
-    costCny: chapterMeta.costCny ?? 0,
-    accepted: verdict.pass,
+  return chapterMeta;
+}
+
+/**
+ * 同一章跑 k 个变体，挑最好的那个落盘。
+ * 第一章值得这么干：第一印象只有一个。
+ */
+export async function runWithCandidates(
+  bookSlug: string,
+  n: number,
+  k: number,
+): Promise<ChapterResult> {
+  const book = loadBook(bookSlug);
+  const runs: ChapterResult[] = [];
+
+  for (let v = 0; v < k; v++) {
+    console.log(`\n\x1b[2m──────── 候选 ${v + 1}/${k} ────────\x1b[0m`);
+    // 先全跑完再统一落盘；每版之间靠温度拉开差异
+    runs.push(await runChapter({ bookSlug, n, variant: v, persist: false }));
+  }
+
+  const scoreOf = (r: ChapterResult): number => {
+    const avg = r.critiques.length
+      ? r.critiques.reduce((s, c) => s + c.score, 0) / r.critiques.length
+      : 0;
+    const votes = r.coldRead.filter((c) => c.willContinue).length;
+    const hard = r.critiques.flatMap((c) => c.defects).filter((d) => d.severity === 'blocker').length;
+    return avg * 10 + votes * 8 - hard * 25 + (r.accepted ? 15 : 0);
   };
+
+  console.log('\n\x1b[1m候选对比\x1b[0m');
+  runs.forEach((r, i) => {
+    const avg = r.critiques.length
+      ? r.critiques.reduce((s, c) => s + c.score, 0) / r.critiques.length
+      : 0;
+    const votes = r.coldRead.filter((c) => c.willContinue).length;
+    console.log(
+      `  候选 ${i + 1}  均分 ${avg.toFixed(1)}　冷读 ${votes}/${r.coldRead.length}　` +
+        `${r.accepted ? '\x1b[32m过线\x1b[0m' : '\x1b[33m未过线\x1b[0m'}　${r.title}`,
+    );
+  });
+
+  const ranked = [...runs].sort((a, b) => scoreOf(b) - scoreOf(a));
+  const winner = ranked[0]!;
+  console.log(`\n  → 选中：第 ${runs.indexOf(winner) + 1} 个候选《${winner.title}》\n`);
+
+  await finalize(book, winner);
+  return winner;
 }
 
 export async function runMany(bookSlug: string, from: number, to: number): Promise<void> {

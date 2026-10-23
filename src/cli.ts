@@ -2,7 +2,7 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadEnv, ROOT, runsDir, resolveRole, checkCriticDiversity } from './engine/config.ts';
-import { runChapter } from './engine/chapter.ts';
+import { runChapter, runWithCandidates } from './engine/chapter.ts';
 import { enableCallLog } from './engine/util.ts';
 import { callLLM } from './engine/llm.ts';
 import { extractJson } from './engine/json.ts';
@@ -75,11 +75,17 @@ async function cmdChapter(): Promise<void> {
   enableCallLog(resolve(dir, 'calls.jsonl'));
   console.log(`\x1b[2m日志：${dir}/calls.jsonl\x1b[0m`);
 
-  const res = await runChapter({
-    bookSlug: slug,
-    n: Number(nRaw),
-    maxRevisions: Number(flag('revise') ?? 2),
-  });
+  const n = Number(nRaw);
+  const candidates = Number(flag('candidates') ?? 1);
+
+  const res =
+    candidates > 1
+      ? await runWithCandidates(slug, n, candidates)
+      : await runChapter({
+          bookSlug: slug,
+          n,
+          ...(flag('revise') ? { maxRevisions: Number(flag('revise')) } : {}),
+        });
 
   if (has('print')) console.log('\n' + '─'.repeat(60) + '\n' + res.body);
 }
@@ -117,10 +123,14 @@ async function cmdCanon(): Promise<void> {
   console.log('');
 }
 
-async function cmdAudit(): Promise<void> {
-  const slug = flag('book') ?? 'cangjingge';
+interface DriftReport {
+  drift: Array<{ kind: string; where: string; quote: string; problem: string; fix: string }>;
+  biggestRisk: string;
+}
+
+async function auditBook(slug: string): Promise<DriftReport> {
   const book = loadBook(slug);
-  const metas = listChapterMetas(slug);
+  const metas = listChapterMetas(slug).filter((m) => m.status === 'accepted');
   if (metas.length === 0) throw new Error('还没有任何章节');
 
   const text = metas
@@ -130,11 +140,6 @@ async function cmdAudit(): Promise<void> {
     })
     .join('');
 
-  const dir = resolve(runsDir(slug), `audit-${runId()}`);
-  mkdirSync(dir, { recursive: true });
-  enableCallLog(resolve(dir, 'calls.jsonl'));
-
-  console.log(`\n全书审计：${metas.length} 章，${text.length} 字\n`);
 
   const res = await callLLM({
     role: 'auditor',
@@ -169,10 +174,18 @@ async function cmdAudit(): Promise<void> {
     label: 'audit',
   });
 
-  const report = extractJson<{
-    drift: Array<{ kind: string; where: string; quote: string; problem: string; fix: string }>;
-    biggestRisk: string;
-  }>(res.text);
+  return extractJson<DriftReport>(res.text);
+}
+
+async function cmdAudit(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const metas = listChapterMetas(slug).filter((m) => m.status === 'accepted');
+  const dir = resolve(runsDir(slug), `audit-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+  console.log(`\n全书审计：${metas.length} 章\n`);
+
+  const report = await auditBook(slug);
 
   console.log('漂移报告\n');
   for (const d of report.drift ?? []) {
@@ -185,6 +198,49 @@ async function cmdAudit(): Promise<void> {
 
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * 夜班：无人值守跑一整轮。
+ * 把它挂到 crontab 上，就是「24 小时不间断」的真实形态。
+ */
+async function cmdNight(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const book = loadBook(slug);
+  const total = book.bible.outline.chapters.length;
+  const accepted = listChapterMetas(slug).filter((m) => m.status === 'accepted');
+  const next = (accepted.at(-1)?.n ?? 0) + 1;
+
+  if (next > total) {
+    console.log(`\n《${slug}》已经写完（${total} 章）。\n`);
+    return;
+  }
+
+  const dir = resolve(runsDir(slug), runId());
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  console.log(`\n\x1b[1m夜班\x1b[0m · 第 ${next}/${total} 章`);
+  console.log(`\x1b[2m日志：${dir}/calls.jsonl\x1b[0m\n`);
+
+  if (next > 3) {
+    console.log('  \x1b[2m审计\x1b[0m 重读全书，找漂移…');
+    try {
+      const r = await auditBook(slug);
+      console.log(
+        `  \x1b[2m审计\x1b[0m ${r.drift?.length ?? 0} 处漂移｜最大风险：${r.biggestRisk}`,
+      );
+      for (const d of (r.drift ?? []).slice(0, 3)) {
+        console.log(`         [${d.kind}] ${d.where}　${d.problem}`);
+      }
+      console.log('');
+    } catch (e) {
+      console.log(`  \x1b[2m审计\x1b[0m 跳过：${(e as Error).message.split('\n')[0]}\n`);
+    }
+  }
+
+  // 黄金三章跑三个变体挑一个，之后一天一章
+  await runWithCandidates(slug, next, next <= 3 ? 3 : 1);
+}
+
 function help(): void {
   console.log(`
   超级写作 · 无人值守中文连载引擎
@@ -193,9 +249,11 @@ function help(): void {
     npm run chapter -- --n 1 [--book slug]      生成一章
     npm run canon   [--book slug]               看看故事圣经和伏笔账本
     npm run audit   [--book slug]               全书漂移审计
+    npm run night   [--book slug]               夜班：审计 + 写下一章（给 crontab 用）
 
   选项
-    --revise N    最多修订几轮（默认 2）
+    --revise N      最多修订几轮（默认：黄金三章 3 轮，之后 2 轮）
+    --candidates K  同一章跑 K 个变体，挑最好的那个落盘（第一章建议 3）
     --print       生成完把正文打到终端
 
   书的目录：books/<slug>/bible/
@@ -212,6 +270,8 @@ async function main(): Promise<void> {
       return cmdCanon();
     case 'audit':
       return cmdAudit();
+    case 'night':
+      return cmdNight();
     default:
       return help();
   }

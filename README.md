@@ -96,6 +96,18 @@ npm run read     # http://127.0.0.1:8787
 - `?theme=dark` / `?theme=light` 强制主题（调试用）
 - 字号三档、昼夜切换、按键 ← → 翻页、阅读位置记忆
 
+## 无人值守
+
+```bash
+npm run night        # 审计全书 → 写下一章（黄金三章自动跑 3 个变体挑一个）
+```
+
+挂到 crontab 上，就是「24 小时不间断」的真实形态：
+
+```cron
+0 2 * * * cd /Users/zhefeng/development/Repositories/super-writer && PATH=/opt/homebrew/bin:$PATH npm run night >> runs/night.log 2>&1
+```
+
 ## 成本
 
 单章流水线大约 4–8 次模型调用，¥1–3。30 章不到 ¥100。
