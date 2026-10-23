@@ -2,6 +2,8 @@ import { callLLM, spendSoFar } from './llm.ts';
 import { extractJson, countChars } from './json.ts';
 import { mapLimit } from './util.ts';
 import { isMock } from './mock.ts';
+import { applyPatches, type Patch } from './patch.ts';
+import { lintProse, formatViolations } from './lint.ts';
 import {
   bookBriefing,
   beatFor,
@@ -16,8 +18,10 @@ import {
 import { runAllCritics, type Critique, type Defect } from './critics.ts';
 import { runColdReaders, tally, type ColdReadResult } from './coldRead.ts';
 import {
-  appendFacts,
+  replaceFacts,
+  dropGeneratedPromises,
   loadBook,
+  loadChapter,
   saveChapter,
   savePromises,
   type BookHandle,
@@ -228,10 +232,15 @@ ${bookBriefing(book)}
 
 ${styleRules(book)}
 
-## 最重要的三条
+## 最重要的四条
 1. 每段不超过三行。
 2. 不许直接写情绪，只写动作和物件。
-3. 章末最后一句必须是钩子。`;
+3. 章末最后一句必须是钩子。
+4. 用词必须属于沈砚这个人。他是抄书匠，不是修行者。
+   禁用：气感、内息、真元、灵脉、神识、神通、法力、灵力、元力。
+   他描述修行只会说「那本薄册子」「练」「字浮上来」。
+   另外：老周被下了禁言，他**说不出**关于墨池、献祭、最后一页的直白陈述。
+   他只能用暗示、反问、指某个地方。写成他说清楚真相，就是错的。`;
 
   const user = [
     progressBrief(book, n),
@@ -251,6 +260,8 @@ ${styleRules(book)}
     `- 章末最后一句要达成这个意图：${plan.endHook}`,
     `- 这一章绝对不能出现：${plan.mustNot.join('；')}`,
     `- 只写场景表里的事件。不要新增情节、人物、物件——包括结尾不要多写一段。`,
+    `- 同一段描写不许出现两次。场景之间必须有明确的时间标记（几点、多久之后、天亮了），不许从「坐到天亮」直接跳到「醒了」。`,
+    `- 章末的反转不能和前面已经写出来的事实打架。`,
     `- 章末最后一句就停在钩子上，后面不要再写任何东西。`,
     `- 不要写「第X章」这种标题。不要写任何解释性的话。只输出正文。`,
   ].join('\n\n---\n\n');
@@ -292,40 +303,64 @@ async function expandIfShort(book: BookHandle, n: number, body: string, target: 
 }
 
 // ─────────────────────────────────────────────────────────────
-// 阶段 4：修订
+// 阶段 3.5：机械体检 + 定点清洗
 // ─────────────────────────────────────────────────────────────
 
-interface Patch {
-  find: string;
-  replace: string;
-}
-
 /**
- * 应用补丁。
- * 只接受「在正文里唯一出现」的 find —— 找不到或找到多处一律跳过，
- * 宁可漏修，也不要改错地方。
+ * 禁用词、失声词、长句、情绪直陈——这些能机械查出来，就别花钱让模型找。
+ * 查出来之后定点修补，不重写。
  */
-function applyPatches(body: string, patches: Patch[]): { body: string; applied: number; skipped: number } {
-  let out = body;
-  let applied = 0;
-  let skipped = 0;
+async function cleanDraft(
+  book: BookHandle,
+  n: number,
+  body: string,
+): Promise<{ body: string; before: number; fixed: number }> {
+  const violations = lintProse(body);
+  if (violations.length === 0) return { body, before: 0, fixed: 0 };
 
-  for (const p of patches) {
-    const find = (p.find ?? '').trim();
-    if (find.length < 4) {
-      skipped++;
-      continue;
-    }
-    const first = out.indexOf(find);
-    if (first === -1 || out.indexOf(find, first + 1) !== -1) {
-      skipped++;
-      continue;
-    }
-    out = out.slice(0, first) + (p.replace ?? '') + out.slice(first + find.length);
-    applied++;
+  log('体检', `命中 ${violations.length} 处（禁用词/失声/长句/情绪直陈），定点清洗…`);
+
+  const res = await callLLM({
+    role: 'reviser',
+    system: `你是《${bookTitle(book)}》的文字校对。你只做一件事：把违规的句子改干净。
+
+${styleRules(book)}
+
+铁律：
+- 只替换有问题的句子，其余一个字都不要动。
+- find 必须是原文里逐字存在、且只出现一次的片段。
+- replace 保持原意、保持长度量级，不许新增情节。
+- 改不掉就跳过。`,
+    user: [
+      `## 正文`,
+      body,
+      `## 违规清单`,
+      formatViolations(violations.slice(0, 20)),
+      `## 输出`,
+      `只输出 JSON：{"patches":[{"find":"原句","replace":"改后"}]}`,
+    ].join('\n\n---\n\n'),
+    json: true,
+    maxTokens: 6000,
+    label: `clean:${n}`,
+  });
+
+  let patches: Patch[] = [];
+  try {
+    patches = extractJson<{ patches: Patch[] }>(res.text).patches ?? [];
+  } catch {
+    patches = [];
   }
-  return { body: out, applied, skipped };
+
+  const r = applyPatches(body, patches);
+  const after = lintProse(r.body).length;
+  log('体检', `修好 ${violations.length - after} 处，剩 ${after} 处`);
+
+  return { body: r.body, before: violations.length, fixed: violations.length - after };
 }
+
+// ─────────────────────────────────────────────────────────────
+// 阶段 4：修订
+// ─────────────────────────────────────────────────────────────
 
 /**
  * 修订 = 打补丁，不是重写。
@@ -599,6 +634,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
   let body = await draft(book, n, plan, opening, temperature);
   body = await expandIfShort(book, n, body, plan.wordTarget);
   log('起草', `初稿 ${countChars(body)} 字`);
+  ({ body } = await cleanDraft(book, n, body));
 
   let critiques: Critique[] = [];
   let cold: ColdReadResult[] = [];
@@ -706,22 +742,23 @@ export async function finalize(book: BookHandle, result: ChapterResult): Promise
   log('归档', '沉淀设定与伏笔…');
   const update = await recordCanon(book, n, plan.title, body);
 
-  const promises: Promise_[] = book.bible.promises.map((p) => {
+  // 重跑这一章时，先把它上一版自动生成的伏笔清掉，保证幂等
+  const base = dropGeneratedPromises(book.bible.promises, n);
+  const promises: Promise_[] = base.map((p) => {
     const upd = update.promiseUpdates.find((u) => u.id === p.id);
     return upd && upd.paidAt ? { ...p, paidAt: upd.paidAt } : p;
   });
 
-  let nextId = promises.length + 1;
-  for (const np of update.newPromises) {
+  update.newPromises.forEach((np, i) => {
     promises.push({
-      id: `p${nextId++}`,
+      id: `g${n}-${i + 1}`,
       text: np.text,
       plantedAt: n,
       dueBy: np.dueBy,
       paidAt: null,
       importance: np.importance,
     });
-  }
+  });
 
   const facts: Fact[] = update.newFacts.map((f, i) => ({
     id: `f${n}-${i + 1}`,
@@ -752,7 +789,7 @@ export async function finalize(book: BookHandle, result: ChapterResult): Promise
   const persist = !isMock() || process.env.SW_MOCK_SAVE === '1';
   if (persist) {
     savePromises(book.slug, promises);
-    appendFacts(book.slug, facts);
+    replaceFacts(book.slug, n, facts);
     saveChapter(book.slug, n, plan.title, body, chapterMeta);
   } else {
     log('归档', 'mock 模式：不写盘（要写盘设 SW_MOCK_SAVE=1）');
@@ -812,6 +849,45 @@ export async function runWithCandidates(
 
   await finalize(book, winner);
   return winner;
+}
+
+/**
+ * 从已定稿的正文重算一章的派生数据（事实、伏笔、摘要）。
+ * 用途：账本被脏数据污染之后重新对齐；或者手动改过正文。
+ */
+export async function recanonChapter(bookSlug: string, n: number): Promise<void> {
+  const book = loadBook(bookSlug);
+  const ch = loadChapter(bookSlug, n);
+  if (!ch) throw new Error(`没有第 ${n} 章`);
+
+  const update = await recordCanon(book, n, ch.meta.title, ch.body);
+
+  const facts: Fact[] = update.newFacts.map((f, i) => ({
+    id: `f${n}-${i + 1}`,
+    chapter: n,
+    subject: f.subject,
+    fact: f.fact,
+  }));
+  replaceFacts(bookSlug, n, facts);
+
+  const promises = dropGeneratedPromises(book.bible.promises, n).map((p) => {
+    const upd = update.promiseUpdates.find((u) => u.id === p.id);
+    return upd && upd.paidAt ? { ...p, paidAt: upd.paidAt } : p;
+  });
+  update.newPromises.forEach((np, i) => {
+    promises.push({
+      id: `g${n}-${i + 1}`,
+      text: np.text,
+      plantedAt: n,
+      dueBy: np.dueBy,
+      paidAt: null,
+      importance: np.importance,
+    });
+  });
+  savePromises(bookSlug, promises);
+
+  log('recanon', `第 ${n} 章：${facts.length} 条事实，${update.newPromises.length} 条新伏笔`);
+  log('recanon', update.summary);
 }
 
 export async function runMany(bookSlug: string, from: number, to: number): Promise<void> {

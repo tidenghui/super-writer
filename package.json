@@ -14,7 +14,8 @@
     "doctor": "tsx src/cli.ts doctor",
     "typecheck": "tsc --noEmit",
     "read": "tsx src/serve/server.ts",
-    "night": "tsx src/cli.ts night"
+    "night": "tsx src/cli.ts night",
+    "recanon": "tsx src/cli.ts recanon"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

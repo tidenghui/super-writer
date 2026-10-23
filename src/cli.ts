@@ -2,7 +2,7 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadEnv, ROOT, runsDir, resolveRole, checkCriticDiversity } from './engine/config.ts';
-import { runChapter, runWithCandidates } from './engine/chapter.ts';
+import { runChapter, runWithCandidates, recanonChapter } from './engine/chapter.ts';
 import { enableCallLog } from './engine/util.ts';
 import { callLLM } from './engine/llm.ts';
 import { extractJson } from './engine/json.ts';
@@ -105,6 +105,16 @@ async function cmdChapter(): Promise<void> {
         });
 
   if (has('print')) console.log('\n' + '─'.repeat(60) + '\n' + res.body);
+}
+
+async function cmdRecanon(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const n = Number(flag('n'));
+  if (!n) throw new Error('缺 --n <章号>');
+  const dir = resolve(runsDir(slug), `recanon-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+  await recanonChapter(slug, n);
 }
 
 async function cmdCanon(): Promise<void> {
@@ -265,6 +275,7 @@ function help(): void {
     npm run doctor [--ping]                     检查环境和 API key（--ping 真实调一次）
     npm run chapter -- --n 1 [--book slug]      生成一章
     npm run canon   [--book slug]               看看故事圣经和伏笔账本
+    npm run recanon -- --n 1                    从定稿正文重算某章的事实与伏笔
     npm run audit   [--book slug]               全书漂移审计
     npm run night   [--book slug]               夜班：审计 + 写下一章（给 crontab 用）
 
@@ -285,6 +296,8 @@ async function main(): Promise<void> {
       return cmdChapter();
     case 'canon':
       return cmdCanon();
+    case 'recanon':
+      return cmdRecanon();
     case 'audit':
       return cmdAudit();
     case 'night':

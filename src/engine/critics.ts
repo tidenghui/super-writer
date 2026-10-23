@@ -1,7 +1,7 @@
 import { callLLM } from './llm.ts';
 import { extractJson } from './json.ts';
 import { mapLimit } from './util.ts';
-import type { BookHandle } from '../canon/store.ts';
+import { loadChapter, type BookHandle } from '../canon/store.ts';
 import { bookBriefing, factsBrief, premiseOnly, promiseBrief, styleRules } from './context.ts';
 
 export type Severity = 'blocker' | 'major' | 'minor';
@@ -148,6 +148,17 @@ function criticUser(
   body: string,
   def: CriticDef,
 ): string {
+  // 连续性编辑必须看到原文，不能只看摘要和事实表——
+  // 上一版它就这样漏掉了「同一件东西换了位置」这种跨越两章的矛盾。
+  const previous =
+    def.id === 'continuity'
+      ? [chapterNo - 2, chapterNo - 1]
+          .map((n) => (n >= 1 ? loadChapter(book.slug, n) : null))
+          .filter((c): c is NonNullable<typeof c> => !!c)
+          .map((c) => `## 第 ${c.meta.n} 章《${c.meta.title}》原文\n\n${c.body}`)
+          .join('\n\n---\n\n')
+      : '';
+
   const parts = [
     styleRules(book),
     // 每个批评家都要知道这本书的类型契约，否则会按写实标准把超自然设定"修"掉
@@ -155,6 +166,7 @@ function criticUser(
     def.needsCanon ? bookBriefing(book) : '',
     def.needsCanon ? promiseBrief(book, chapterNo) : '',
     def.needsCanon ? factsBrief(book, chapterNo) : '',
+    previous,
     `## 待审正文 · 第${chapterNo}章\n\n${body}`,
   ];
   return parts.filter(Boolean).join('\n\n---\n\n');

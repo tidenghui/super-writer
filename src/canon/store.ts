@@ -181,11 +181,35 @@ export function saveChapter(
   return full;
 }
 
-export function appendFacts(slug: string, facts: Fact[]): void {
-  if (facts.length === 0) return;
+/**
+ * 写某一章的事实。
+ * 必须按章替换而不是追加：重跑一章时，旧版本的事实必须消失，
+ * 否则被丢弃的草稿会把它编出来的"事实"留在账本里，污染后面所有章节。
+ */
+export function replaceFacts(slug: string, chapter: number, facts: Fact[]): void {
   const dir = resolve(bookDir(slug), 'canon');
   mkdirSync(dir, { recursive: true });
-  appendFileSync(resolve(dir, 'facts.jsonl'), facts.map((f) => JSON.stringify(f)).join('\n') + '\n');
+  const path = resolve(dir, 'facts.jsonl');
+
+  const kept = existsSync(path)
+    ? read(path)
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l) as Fact)
+        .filter((f) => f.chapter !== chapter)
+    : [];
+
+  const all = [...kept, ...facts];
+  writeFileSync(path, all.map((f) => JSON.stringify(f)).join('\n') + (all.length ? '\n' : ''));
+}
+
+/**
+ * 删掉某一章自动生成的伏笔。
+ * 圣经里手写的伏笔（p1、p2…）不能被删，所以自动生成的用 g{章}-{序} 前缀。
+ */
+export function dropGeneratedPromises(promises: Promise_[], chapter: number): Promise_[] {
+  const prefix = `g${chapter}-`;
+  return promises.filter((p) => !p.id.startsWith(prefix));
 }
 
 export function savePromises(slug: string, promises: Promise_[]): void {
