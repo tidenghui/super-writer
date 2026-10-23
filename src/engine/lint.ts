@@ -140,3 +140,26 @@ export function chapterShape(body: string): Shape {
     avgParaLen: paras.length ? Math.round(totalChars / paras.length) : 0,
   };
 }
+
+
+/**
+ * 公式化检测。
+ *
+ * 单章看不出来，通读才看得出来：老周每章都咳、每章都用「不是A，是B」、
+ * 每章灯芯都「短了」。写手会不知不觉把上一章的手法再抄一遍。
+ */
+export function repetitionWarnings(body: string): string[] {
+  const out: string[] = [];
+  const count = (re: RegExp) => (body.match(re) ?? []).length;
+
+  const cough = count(/咳/g);
+  if (cough > 6) out.push(`「咳」出现 ${cough} 次，人物的口头习惯已经变成噪点`);
+
+  const negate = count(/不是[^。！？]{0,14}，?是/g);
+  if (negate > 3) out.push(`「不是A，是B」句式出现 ${negate} 次，成了公式`);
+
+  const lamp = count(/灯芯/g);
+  if (lamp > 1) out.push(`「灯芯」出现 ${lamp} 次，同一物件别反复当节拍器`);
+
+  return out;
+}

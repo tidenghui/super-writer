@@ -80,12 +80,60 @@
     "importance": 2
   },
   {
+    "id": "g5-1",
+    "text": "阿满指根下“别”字后面两个被汗洇糊的字是什么，尤其最后一个轮廓像“我”的字。",
+    "plantedAt": 5,
+    "dueBy": 10,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g5-2",
+    "text": "那个拿阿满手写“沈砚”并留下墨痕的不认得的人是谁，他为何要阿满记住。",
+    "plantedAt": 5,
+    "dueBy": 12,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g4-1",
+    "text": "账册上“七月十六”空名格留给谁，那一夜将发生什么。",
+    "plantedAt": 4,
+    "dueBy": 18,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g4-2",
+    "text": "沈砚领墨记档三年全空，账册却记他抄十二页用油烟墨，是谁代签、那十二页内容为何。",
+    "plantedAt": 4,
+    "dueBy": 10,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g1-1",
+    "text": "门外传来三下一样重的脚步声，来人不是老周，是谁？",
+    "plantedAt": 1,
+    "dueBy": 6,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g1-2",
+    "text": "父亲那行血字后半截糊住的内容，以及“别让”后面是什么。",
+    "plantedAt": 1,
+    "dueBy": 16,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
     "id": "g2-1",
     "text": "老周指过的县志第三排第四格缺第六册、账册柜、律例匣，这三处分别藏着什么。",
     "plantedAt": 2,
     "dueBy": 6,
     "paidAt": null,
-    "importance": 2
+    "importance": 3
   },
   {
     "id": "g2-2",
@@ -108,54 +156,6 @@
     "text": "沈砚丹田内散成七个清晰字“秋七月，他还活着”，这七个字与抄本上反复出现的字句有何关联。",
     "plantedAt": 3,
     "dueBy": 12,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
-    "id": "g5-1",
-    "text": "阿满指根下“别”字后面两个被汗洇糊的字是什么，尤其最后一个轮廓像“我”的字。",
-    "plantedAt": 5,
-    "dueBy": 10,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
-    "id": "g5-2",
-    "text": "那个拿阿满手写“沈砚”并留下墨痕的不认得的人是谁，他为何要阿满记住。",
-    "plantedAt": 5,
-    "dueBy": 12,
-    "paidAt": null,
-    "importance": 2
-  },
-  {
-    "id": "g1-1",
-    "text": "门外传来三下一样重的脚步声，来人不是老周，是谁？",
-    "plantedAt": 1,
-    "dueBy": 6,
-    "paidAt": null,
-    "importance": 3
-  },
-  {
-    "id": "g1-2",
-    "text": "父亲那行血字后半截糊住的内容，以及“别让”后面是什么。",
-    "plantedAt": 1,
-    "dueBy": 16,
-    "paidAt": null,
-    "importance": 3
-  },
-  {
-    "id": "g4-1",
-    "text": "账册上“七月十六”空名格留给谁，那一夜将发生什么。",
-    "plantedAt": 4,
-    "dueBy": 18,
-    "paidAt": null,
-    "importance": 3
-  },
-  {
-    "id": "g4-2",
-    "text": "沈砚领墨记档三年全空，账册却记他抄十二页用油烟墨，是谁代签、那十二页内容为何。",
-    "plantedAt": 4,
-    "dueBy": 10,
     "paidAt": null,
     "importance": 3
   }

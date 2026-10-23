@@ -3,7 +3,7 @@ import { extractJson, countChars } from './json.ts';
 import { mapLimit } from './util.ts';
 import { isMock } from './mock.ts';
 import { applyPatches, type Patch } from './patch.ts';
-import { lintProse, formatViolations, chapterShape } from './lint.ts';
+import { lintProse, formatViolations, chapterShape, repetitionWarnings } from './lint.ts';
 import {
   bookBriefing,
   beatFor,
@@ -715,6 +715,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
   if (shape.avgParaLen < 18) {
     log('章形', '\x1b[33m段落过碎——每句话都单独成段，读起来像聊天记录。\x1b[0m');
   }
+  for (const w of repetitionWarnings(body)) log('章形', `\x1b[33m${w}\x1b[0m`);
 
   let critiques: Critique[] = [];
   let cold: ColdReadResult[] = [];
