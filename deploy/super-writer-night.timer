@@ -2,7 +2,8 @@
 Description=Super Writer night shift, every day at 02:00
 
 [Timer]
-OnCalendar=*-*-* 02:00:00
+# 按北京时间跑。服务器在美国，不改时区的话「凌晨两点」会是国内的下午。
+OnCalendar=*-*-* 02:00:00 Asia/Shanghai
 # 机器重启或停机错过了，开机后补跑一次
 Persistent=true
 RandomizedDelaySec=300
