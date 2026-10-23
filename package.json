@@ -16,7 +16,10 @@
     "read": "tsx src/serve/server.ts",
     "night": "tsx src/cli.ts night",
     "recanon": "tsx src/cli.ts recanon",
-    "fix": "tsx src/cli.ts fix"
+    "fix": "tsx src/cli.ts fix",
+    "reread": "tsx src/cli.ts reread",
+    "calibrate": "tsx src/cli.ts calibrate",
+    "firstscreen": "tsx src/cli.ts firstscreen"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -1,7 +1,7 @@
 import { callLLM } from './llm.ts';
 import { extractJson } from './json.ts';
 import { mapLimit } from './util.ts';
-import { styleRules } from './context.ts';
+import { listChapterMetas, summaryIndex } from '../canon/store.ts';
 import type { BookHandle } from '../canon/store.ts';
 
 export interface ColdReadResult {
@@ -73,12 +73,25 @@ ${p.bio}
 ${CONTRACT}`;
 }
 
+/**
+ * 读者看到的东西 = 前情提要 + 这一章。
+ *
+ * 早先这里还会把《文风规范》塞给读者，那是个错误：
+ * 读者不知道、也不关心作者想追求什么，塞给他只会让他去检查合规，
+ * 而不是回答「我想不想翻下一章」。
+ */
+function priorFor(book: BookHandle, chapterNo: number): string {
+  const prior = summaryIndex(listChapterMetas(book.slug), chapterNo);
+  return prior
+    ? `## 前情提要（你前几章读过的）\n${prior}`
+    : '这是第一章。你刚点开这本书，什么都不知道。';
+}
+
 function user(book: BookHandle, chapterNo: number, body: string): string {
   return [
-    `这是一本连载中的仙侠小说，第 ${chapterNo} 章。你之前没读过这本。`,
-    '（下面附上作者的文风要求，仅供你参考作者想追求什么，不要拿它来给作者打分。）',
-    styleRules(book).slice(0, 900),
+    priorFor(book, chapterNo),
     `## 第${chapterNo}章\n\n${body}`,
+    '你刚读完这一章。现在告诉我你真实的想法。',
   ].join('\n\n---\n\n');
 }
 
@@ -106,6 +119,75 @@ export async function coldRead(
     wantNext: raw.wantNext ?? '',
     verdict: raw.verdict ?? '',
   };
+}
+
+/**
+ * 首屏测试。
+ *
+ * 手机读者看不到「整章好不好」——他在前两屏就决定走不走。
+ * 整章冷读测的是「读完之后想不想看下一章」，这个测的是「看不看得下去第一屏」。
+ * 两件事，缺一不可。
+ */
+export interface FirstScreenResult {
+  persona: string;
+  keepReading: boolean;
+  stoppedAt: string | null;
+  reason: string;
+}
+
+const FIRST_SCREEN_CONTRACT = `输出格式（只输出 JSON）：
+
+{
+  "keepReading": true 或 false,
+  "stoppedAt": "从这几百字里逐字复制你差点划走的那一句；没有就填 null",
+  "reason": "一句话，为什么继续或者为什么不继续。不要客套。"
+}
+
+你只看了开头几百字。你不是在评价整章，你是在决定要不要继续往下滑。`;
+
+export async function firstScreen(
+  book: BookHandle,
+  chapterNo: number,
+  opening: string,
+  personaIndex: number,
+): Promise<FirstScreenResult> {
+  const p = PERSONAS[personaIndex % PERSONAS.length]!;
+  const res = await callLLM({
+    role: 'coldReader',
+    system: `你就是这个人，不是扮演，是就是。
+
+${p.bio}
+
+你在手机上点开了一本不认识的连载小说，只读了开头这几百字。
+
+${FIRST_SCREEN_CONTRACT}`,
+    user: [
+      priorFor(book, chapterNo),
+      `## 开头（你只看到这里）\n\n${opening}`,
+      '屏幕停在这儿。你往下滑，还是退出？',
+    ]
+      .filter(Boolean)
+      .join('\n\n---\n\n'),
+    json: true,
+    maxTokens: 1000,
+    label: `firstscreen:${p.id}`,
+  });
+
+  const raw = extractJson<Partial<FirstScreenResult>>(res.text);
+  return {
+    persona: p.name,
+    keepReading: raw.keepReading === true,
+    stoppedAt: typeof raw.stoppedAt === 'string' ? raw.stoppedAt : null,
+    reason: raw.reason ?? '',
+  };
+}
+
+export function firstScreenAll(
+  book: BookHandle,
+  chapterNo: number,
+  opening: string,
+): Promise<FirstScreenResult[]> {
+  return mapLimit(PERSONAS, PERSONAS.length, (_, i) => firstScreen(book, chapterNo, opening, i));
 }
 
 export interface ColdRun {

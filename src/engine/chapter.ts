@@ -25,6 +25,7 @@ import {
   loadChapter,
   saveChapter,
   savePromises,
+  patchChapterMeta,
   type BookHandle,
   type ChapterMeta,
   type Promise_,
@@ -923,6 +924,22 @@ ${styleRules(book)}
 
   const after = countChars(r.body);
   return { applied: r.applied, skipped: r.skipped, before, after };
+}
+
+/**
+ * 只重跑读者，不改正文。
+ * 改过正文、或改过读者提示词之后，用它重新测一遍「还有没有人愿意追」。
+ */
+export async function rereadChapter(bookSlug: string, n: number): Promise<ColdReadResult[]> {
+  const book = loadBook(bookSlug);
+  const ch = loadChapter(bookSlug, n);
+  if (!ch) throw new Error(`没有第 ${n} 章`);
+
+  const run = await runColdReaders(book, n, ch.body);
+  if (run.ok.length < 2) throw new Error(`冷读失败太多：${run.failed.map((f) => f.error).join('；')}`);
+
+  patchChapterMeta(bookSlug, n, { coldRead: tally(run.ok) });
+  return run.ok;
 }
 
 /**

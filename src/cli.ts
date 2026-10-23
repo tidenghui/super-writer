@@ -2,7 +2,9 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadEnv, ROOT, runsDir, resolveRole, checkCriticDiversity } from './engine/config.ts';
-import { runChapter, runWithCandidates, recanonChapter, fixChapter } from './engine/chapter.ts';
+import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapter } from './engine/chapter.ts';
+import { runColdReaders, firstScreenAll } from './engine/coldRead.ts';
+import { readFileSync } from 'node:fs';
 import { enableCallLog } from './engine/util.ts';
 import { callLLM } from './engine/llm.ts';
 import { extractJson } from './engine/json.ts';
@@ -125,6 +127,103 @@ async function cmdFix(): Promise<void> {
   if (r.applied > 0) {
     console.log('  记得跑一次 recanon 对齐事实表：npm run recanon -- --n ' + n + '\n');
   }
+}
+
+/**
+ * 标定读者分身。
+ *
+ * 一个从来不说「不」的测试，测不出任何东西。
+ * 每次换模型、改提示词之后跑一次：烂稿必须被拒绝，真稿必须被接受。
+ * 如果哪天烂稿也能拿 3/3，说明这套判据已经失效了。
+ */
+/** 首屏测试：只看开头 300 字，会不会继续滑 */
+async function cmdFirstScreen(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const book = loadBook(slug);
+  const metas = listChapterMetas(slug).filter((m) => m.status === 'accepted');
+  const targets = has('all') ? metas.map((m) => m.n) : [Number(flag('n') ?? metas[0]?.n)];
+
+  const dir = resolve(runsDir(slug), `firstscreen-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  for (const n of targets) {
+    if (!n) continue;
+    const ch = loadChapter(slug, n);
+    if (!ch) continue;
+    const opening = ch.body.slice(0, 320);
+    const rs = await firstScreenAll(book, n, opening);
+    const keep = rs.filter((r) => r.keepReading).length;
+    console.log(`\n  第 ${n} 章　前 320 字　${keep}/${rs.length} 会继续滑`);
+    for (const r of rs) {
+      console.log(`    ${r.persona}：${r.keepReading ? '继续' : '退出'}｜${r.reason}`);
+      if (r.stoppedAt) console.log(`      差点划走：「${r.stoppedAt}」`);
+    }
+  }
+  console.log('');
+}
+
+async function cmdCalibrate(): Promise<void> {
+  const book = loadBook('cangjingge');
+  const bad = readFileSync(resolve(ROOT, 'fixtures/bad-chapter.md'), 'utf8');
+  const good = loadChapter('cangjingge', 1)?.body ?? '';
+  if (!good) throw new Error('先跑出第一章再标定');
+
+  const dir = resolve(runsDir('cangjingge'), `calibrate-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  const badRun = await runColdReaders(book, 1, bad);
+  const goodRun = await runColdReaders(book, 1, good);
+
+  const badVotes = badRun.ok.filter((r) => r.willContinue).length;
+  const goodVotes = goodRun.ok.filter((r) => r.willContinue).length;
+
+  console.log(`\n  烂稿　${badVotes}/${badRun.ok.length} 会继续`);
+  for (const r of badRun.ok) console.log(`    ${r.persona}：${r.verdict}`);
+  console.log(`\n  第一章　${goodVotes}/${goodRun.ok.length} 会继续`);
+  for (const r of goodRun.ok) console.log(`    ${r.persona}：${r.verdict}`);
+
+  // 首屏也要能分辨：烂稿的开头不该让人想往下滑
+  const badFirst = await firstScreenAll(book, 1, bad.slice(0, 320));
+  const goodFirst = await firstScreenAll(book, 1, good.slice(0, 320));
+  const badKeep = badFirst.filter((r) => r.keepReading).length;
+  const goodKeep = goodFirst.filter((r) => r.keepReading).length;
+
+  console.log(`\n  烂稿首屏　${badKeep}/${badFirst.length} 会继续滑`);
+  for (const r of badFirst) console.log(`    ${r.persona}：${r.keepReading ? '继续' : '退出'}｜${r.reason}`);
+  console.log(`\n  第一章首屏　${goodKeep}/${goodFirst.length} 会继续滑`);
+
+  const gap = goodVotes - badVotes;
+  const gapFirst = goodKeep - badKeep;
+  const ok = gap >= 2 && gapFirst >= 2;
+  console.log(
+    `\n  整章判别力 ${gap >= 2 ? '\x1b[32m足够\x1b[0m' : '\x1b[31m不足\x1b[0m'}（${gap}）　` +
+      `首屏判别力 ${gapFirst >= 2 ? '\x1b[32m足够\x1b[0m' : '\x1b[31m不足\x1b[0m'}（${gapFirst}）\n`,
+  );
+  if (!ok) process.exitCode = 1;
+}
+
+async function cmdReread(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const metas = listChapterMetas(slug).filter((m) => m.status === 'accepted');
+  const targets = has('all')
+    ? metas.map((m) => m.n)
+    : [Number(flag('n') ?? metas.at(-1)?.n)];
+
+  const dir = resolve(runsDir(slug), `reread-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  for (const n of targets) {
+    if (!n) continue;
+    const rs = await rereadChapter(slug, n);
+    const votes = rs.filter((r) => r.willContinue).length;
+    console.log(`\n  第 ${n} 章　${votes}/${rs.length} 会继续`);
+    for (const r of rs) console.log(`    ${r.persona}：${r.verdict}`);
+    if (has('all')) continue;
+  }
+  console.log('');
 }
 
 async function cmdRecanon(): Promise<void> {
@@ -296,7 +395,10 @@ function help(): void {
     npm run doctor [--ping]                     检查环境和 API key（--ping 真实调一次）
     npm run chapter -- --n 1 [--book slug]      生成一章
     npm run canon   [--book slug]               看看故事圣经和伏笔账本
-    npm run fix     -- --n 3 -m "批注"          按人工批注定点修订一章
+    npm run firstscreen [--n 1 | --all]         首屏测试：只看开头 320 字
+    npm run calibrate                           标定读者分身：烂稿必须被拒绝
+    npm run reread  [--n 1 | --all]             重跑读者测（不改正文）
+    npm run fix     -- --n 3 --m "批注"          按人工批注定点修订一章
     npm run recanon -- --n 1                    从定稿正文重算某章的事实与伏笔
     npm run audit   [--book slug]               全书漂移审计
     npm run night   [--book slug]               夜班：审计 + 写下一章（给 crontab 用）
@@ -320,6 +422,12 @@ async function main(): Promise<void> {
       return cmdCanon();
     case 'recanon':
       return cmdRecanon();
+    case 'reread':
+      return cmdReread();
+    case 'calibrate':
+      return cmdCalibrate();
+    case 'firstscreen':
+      return cmdFirstScreen();
     case 'fix':
       return cmdFix();
     case 'audit':

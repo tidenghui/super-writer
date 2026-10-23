@@ -263,3 +263,13 @@ export function loadBookInfo(slug: string): BookInfo {
   const raw = readJson<Partial<BookInfo>>(p);
   return { title: raw.title ?? slug, ...raw };
 }
+
+
+/** 只改元数据，不动正文 */
+export function patchChapterMeta(slug: string, n: number, patch: Partial<ChapterMeta>): void {
+  const pad = String(n).padStart(3, '0');
+  const path = resolve(bookDir(slug), 'chapters', `${pad}.meta.json`);
+  if (!existsSync(path)) return;
+  const cur = readJson<ChapterMeta>(path);
+  writeFileSync(path, JSON.stringify({ ...cur, ...patch }, null, 2));
+}
