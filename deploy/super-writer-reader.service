@@ -22,9 +22,8 @@ TimeoutStopSec=10
 # 基本加固：只读全盘，只允许写这本书和运行日志
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=strict
+ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/opt/super-writer/books /opt/super-writer/runs
 # 允许本地回环（后面由 Caddy 反代）
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 

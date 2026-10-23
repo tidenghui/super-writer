@@ -114,6 +114,7 @@ async function cmdChapter(): Promise<void> {
       : await runChapter({
           bookSlug: slug,
           n,
+          ...(has('resume') ? { resume: true } : {}),
           ...(flag('revise') ? { maxRevisions: Number(flag('revise')) } : {}),
         });
 
@@ -543,6 +544,7 @@ function help(): void {
   选项
     --revise N      最多修订几轮（默认：黄金三章 3 轮，之后 2 轮）
     --candidates K  同一章跑 K 个变体，挑最好的那个落盘（第一章建议 3）
+    --resume        续修：不重新起草，直接对已有草稿重跑审稿和修订
     --print       生成完把正文打到终端
 
   书的目录：books/<slug>/bible/

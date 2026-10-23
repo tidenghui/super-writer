@@ -99,7 +99,11 @@ ${styleRules(book)}`;
     promiseBrief(book, n),
     factsBrief(book, n),
     beat.day !== undefined
-      ? `## 时间锚点\n今天是第 ${beat.day} 天，距定名还有 ${7 - beat.day} 天。\n这一章的正文里必须出现一个具体的时间信号（剩余天数、更漏、天色、或者别人提起那个日子），让读者始终感到期限在逼近。`
+      ? (() => {
+          const deadline = beat.day < 7 ? 7 : 14;
+          const label = beat.day < 7 ? '定名' : '入池';
+          return `## 时间锚点\n今天是第 ${beat.day} 天，距${label}还有 ${deadline - beat.day} 天。\n这一章的正文里必须出现一个具体的时间信号（剩余天数、更漏、天色、或者别人提起那个日子），让读者始终感到期限在逼近。\n**天数是硬数字，不许写错，读者会算。**`;
+        })()
       : '',
     `## 第 ${n} 章的大纲（必须落实，不许改主线）
 标题（暂定）：${beat.title}
@@ -215,6 +219,7 @@ ${styleRules(book)}`;
     `- 第一句必须是规划里那一句`,
     `- 每个开场用完全不同的切入方式（例如：从声音切入 / 从一个动作切入 / 从一段被念出来的文字切入 / 从对话切入）`,
     `- 结尾都停在让人想读下去的地方`,
+    `- 只许出现这些人物：${book.bible.characters.map((c) => c.name).join('、')}。不许编新名字。`,
     `- 每段不超过三行`,
     '',
     `只输出 JSON，不要解释：{"openings": ["开场一", "开场二", ...]}`,
@@ -225,7 +230,7 @@ ${styleRules(book)}`;
     system,
     user,
     json: true,
-    maxTokens: 6000,
+    maxTokens: 12000,
     label: `openings:${n}`,
     temperatureOverride: 1.2,
   });
@@ -315,6 +320,7 @@ ${styleRules(book)}
     `- 章末最后一句要达成这个意图：${plan.endHook}`,
     `- 这一章绝对不能出现：${plan.mustNot.join('；')}`,
     `- 只写场景表里的事件。不要新增情节、人物、物件——包括结尾不要多写一段。`,
+    `- 不允许出现场景表之外的新人物。需要有人在场，就用老周、柳青梧、阿满、玄清这几个已有的。`,
     `- 同一段描写不许出现两次。场景之间必须有明确的时间标记（几点、多久之后、天亮了），不许从「坐到天亮」直接跳到「醒了」。`,
     `- 章末的反转不能和前面已经写出来的事实打架。`,
     `- 章末最后一句就停在钩子上，后面不要再写任何东西。`,
@@ -639,6 +645,11 @@ export interface RunOptions {
   persist?: boolean;
   /** 变体序号：让多次生成之间产生差异 */
   variant?: number;
+  /**
+   * 续修：不重新起草，直接拿已有的草稿重跑审稿和修订。
+   * 夜班没过闸门的章，早上一键救回来，不用重写整章。
+   */
+  resume?: boolean;
 }
 
 export interface ChapterProfile {
@@ -680,8 +691,14 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
       `${variant ? `　变体 ${variant + 1}` : ''}\n`,
   );
 
+  const existing = opts.resume ? loadChapter(book.slug, n) : null;
+  if (opts.resume && !existing) throw new Error(`没有第 ${n} 章的草稿可续修`);
+
   log('规划', '拆场景…');
-  let plan = await planChapter(book, n);
+  let plan = existing
+    ? ({ title: existing.meta.title, scenes: [], openingLine: '', plant: [], pay: [], endHook: '', wordTarget: 2600, mustNot: [] } as ChapterPlan)
+    : await planChapter(book, n);
+  if (existing) log('规划', `\x1b[2m续修模式：沿用《${existing.meta.title}》，不重新起草\x1b[0m`);
 
   const review = await reviewPlan(book, n, plan);
   if (!review.ok) {
@@ -694,14 +711,19 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
   }
   log('规划', `${plan.scenes.length} 个场景｜${plan.scenes.map((s) => s.location).join(' → ')}`);
 
-  log('开场', '生成候选…');
-  const { opening, why } = await chooseOpening(book, n, plan, profile.openings);
-  log('开场', why);
-
-  log('起草', `目标 ${plan.wordTarget} 字…`);
-  let body = await draft(book, n, plan, opening, temperature);
-  body = await expandIfShort(book, n, body, plan.wordTarget);
-  log('起草', `初稿 ${countChars(body)} 字`);
+  let body: string;
+  if (existing) {
+    body = existing.body;
+    log('起草', `\x1b[2m续修：现有正文 ${countChars(body)} 字\x1b[0m`);
+  } else {
+    log('开场', '生成候选…');
+    const { opening, why } = await chooseOpening(book, n, plan, profile.openings);
+    log('开场', why);
+    log('起草', `目标 ${plan.wordTarget} 字…`);
+    body = await draft(book, n, plan, opening, temperature);
+    body = await expandIfShort(book, n, body, plan.wordTarget);
+    log('起草', `初稿 ${countChars(body)} 字`);
+  }
   ({ body } = await cleanDraft(book, n, body));
 
   const shape = chapterShape(body);

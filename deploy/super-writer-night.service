@@ -16,9 +16,8 @@ TimeoutStartSec=2400
 
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=strict
+ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/opt/super-writer/books /opt/super-writer/runs
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 StandardOutput=append:/opt/super-writer/runs/night.log
