@@ -96,22 +96,6 @@
     "importance": 3
   },
   {
-    "id": "g3-1",
-    "text": "《引气篇》底本第七行那一笔在沈砚用笔尖描时自行前移半寸，这一笔的来历和自行移动的原因是什么。",
-    "plantedAt": 3,
-    "dueBy": 10,
-    "paidAt": 10,
-    "importance": 3
-  },
-  {
-    "id": "g3-2",
-    "text": "沈砚丹田内散成七个清晰字“秋七月，他还活着”，这七个字与抄本上反复出现的字句有何关联。",
-    "plantedAt": 3,
-    "dueBy": 12,
-    "paidAt": null,
-    "importance": 3
-  },
-  {
     "id": "g6-1",
     "text": "枕头下压痕纸第三个字右半边是什么，全名“斋言”指什么。",
     "plantedAt": 6,
@@ -235,6 +219,22 @@
     "id": "g5-2",
     "text": "那个拿阿满手写“沈砚”并留下墨痕的不认得的人是谁，他为何要阿满记住。",
     "plantedAt": 5,
+    "dueBy": 12,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g3-1",
+    "text": "《引气篇》末页第七行那一笔能自行前移，沈砚用笔尖一碰它就往前走半寸，这一笔最终会变成什么、要引向何处。",
+    "plantedAt": 3,
+    "dueBy": 12,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g3-2",
+    "text": "《引气篇》末页被换过页，是谁换的、原页上写的是什么。",
+    "plantedAt": 3,
     "dueBy": 12,
     "paidAt": null,
     "importance": 2
