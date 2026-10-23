@@ -2,7 +2,7 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadEnv, ROOT, runsDir, resolveRole, checkCriticDiversity } from './engine/config.ts';
-import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapter, polishChapter } from './engine/chapter.ts';
+import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapter, polishChapter, runMany } from './engine/chapter.ts';
 import { runAllCritics } from './engine/critics.ts';
 import { runColdReaders, firstScreenAll, comparePair } from './engine/coldRead.ts';
 import { readFileSync } from 'node:fs';
@@ -137,6 +137,20 @@ async function cmdFix(): Promise<void> {
  * 每次换模型、改提示词之后跑一次：烂稿必须被拒绝，真稿必须被接受。
  * 如果哪天烂稿也能拿 3/3，说明这套判据已经失效了。
  */
+/** 连更：从第 X 章写到第 Y 章，中途失败就停下，不硬撑 */
+async function cmdWrite(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const from = Number(flag('from'));
+  const to = Number(flag('to'));
+  if (!from || !to) throw new Error('缺 --from 和 --to');
+
+  const dir = resolve(runsDir(slug), runId());
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  await runMany(slug, from, to);
+}
+
 /** 只打分，不改稿——用来做前后对比 */
 async function cmdScore(): Promise<void> {
   const slug = flag('book') ?? 'cangjingge';
@@ -459,6 +473,17 @@ async function cmdNight(): Promise<void> {
     return;
   }
 
+  // 上一章还在草稿状态时，不许往下写——否则书里会留一个洞
+  const prevMeta = listChapterMetas(slug).find((m) => m.n === next - 1);
+  if (prevMeta && prevMeta.status !== 'accepted') {
+    console.log(
+      `\n  第 ${next - 1} 章还是草稿，先修好它再写第 ${next} 章。\n` +
+        `  npm run fix -- --n ${next - 1} --m "..."  或  npm run chapter -- --n ${next - 1}\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   const dir = resolve(runsDir(slug), runId());
   mkdirSync(dir, { recursive: true });
   enableCallLog(resolve(dir, 'calls.jsonl'));
@@ -503,6 +528,7 @@ function help(): void {
     npm run recanon -- --n 1                    从定稿正文重算某章的事实与伏笔
     npm run audit   [--book slug]               全书漂移审计
     npm run night   [--book slug]               夜班：审计 + 写下一章（给 crontab 用）
+    npm run write   -- --from 7 --to 10         连更若干章
 
   选项
     --revise N      最多修订几轮（默认：黄金三章 3 轮，之后 2 轮）
@@ -531,6 +557,8 @@ async function main(): Promise<void> {
       return cmdFirstScreen();
     case 'compare':
       return cmdCompare();
+    case 'write':
+      return cmdWrite();
     case 'score':
       return cmdScore();
     case 'polish':

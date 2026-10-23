@@ -1192,7 +1192,16 @@ export async function recanonChapter(bookSlug: string, n: number): Promise<void>
 
 export async function runMany(bookSlug: string, from: number, to: number): Promise<void> {
   for (let n = from; n <= to; n++) {
-    await runChapter({ bookSlug, n });
+    const res = await runChapter({ bookSlug, n });
+    if (!res.accepted) {
+      // 连载不能跳章：这一章没过，后面就不许往下写。
+      // 否则读者会看到第 6 章直接跳到第 8 章。
+      console.log(
+        `\n  \x1b[33m第 ${n} 章没有过线，连更中止。\x1b[0m\n` +
+          `  修好它再继续：npm run fix -- --n ${n} --m "..." 或重跑 npm run chapter -- --n ${n}\n`,
+      );
+      return;
+    }
   }
 }
 

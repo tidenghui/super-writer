@@ -22,7 +22,8 @@
     "firstscreen": "tsx src/cli.ts firstscreen",
     "compare": "tsx src/cli.ts compare",
     "score": "tsx src/cli.ts score",
-    "polish": "tsx src/cli.ts polish"
+    "polish": "tsx src/cli.ts polish",
+    "write": "tsx src/cli.ts write"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

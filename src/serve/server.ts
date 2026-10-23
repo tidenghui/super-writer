@@ -115,8 +115,12 @@ function libraryPage(theme: string | null): string {
 function tocPage(slug: string, theme: string | null, draft: boolean): string {
   const info = loadBookInfo(slug);
   const allRaw = listChapterMetas(slug);
-  const accepted = allRaw.filter((c) => c.status === 'accepted');
-  // 默认只发布 accepted；加 ?draft=1 才看得到草稿
+  // 连载不能出现断章：只发布到第一个未定稿的章为止
+  const accepted: ChapterMeta[] = [];
+  for (const m of allRaw) {
+    if (m.status !== 'accepted') break;
+    accepted.push(m);
+  }
   const all = draft ? allRaw : accepted;
 
   const rows = all

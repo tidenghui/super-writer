@@ -20,7 +20,7 @@
     "text": "老周的左眼是怎么瞎的",
     "plantedAt": 2,
     "dueBy": 8,
-    "paidAt": null,
+    "paidAt": 8,
     "importance": 2
   },
   {
@@ -52,7 +52,7 @@
     "text": "枕头下那张空白纸的压痕是谁写的",
     "plantedAt": 6,
     "dueBy": 10,
-    "paidAt": null,
+    "paidAt": 10,
     "importance": 2
   },
   {
@@ -92,7 +92,7 @@
     "text": "沈砚领墨记档三年全空，账册却记他抄十二页用油烟墨，是谁代签、那十二页内容为何。",
     "plantedAt": 4,
     "dueBy": 10,
-    "paidAt": null,
+    "paidAt": 10,
     "importance": 3
   },
   {
@@ -100,7 +100,7 @@
     "text": "《引气篇》底本第七行那一笔在沈砚用笔尖描时自行前移半寸，这一笔的来历和自行移动的原因是什么。",
     "plantedAt": 3,
     "dueBy": 10,
-    "paidAt": null,
+    "paidAt": 10,
     "importance": 3
   },
   {
@@ -116,7 +116,7 @@
     "text": "枕头下压痕纸第三个字右半边是什么，全名“斋言”指什么。",
     "plantedAt": 6,
     "dueBy": 10,
-    "paidAt": null,
+    "paidAt": 10,
     "importance": 2
   },
   {
@@ -124,46 +124,110 @@
     "text": "老周让沈砚擦三层东边那扇二十年没擦干净的窗，用意何在。",
     "plantedAt": 6,
     "dueBy": 9,
-    "paidAt": null,
+    "paidAt": 9,
     "importance": 2
   },
   {
     "id": "g1-1",
     "text": "老周从柜底背板缝里挑出的青蜡线是谁留下的，蜡皮尚软说明刚留下不久。",
     "plantedAt": 1,
-    "dueBy": 6,
-    "paidAt": null,
+    "dueBy": 8,
+    "paidAt": 8,
     "importance": 2
   },
   {
     "id": "g1-2",
     "text": "账册少了一本，老周数第二遍时嘴唇动而不出声，那本账册记了什么、被谁取走。",
     "plantedAt": 1,
-    "dueBy": 8,
-    "paidAt": null,
+    "dueBy": 9,
+    "paidAt": 8,
     "importance": 2
   },
   {
     "id": "g2-1",
     "text": "老周指向县志第三排第四格（缺第六册）、账册柜、律例匣，这三处分别藏着什么，他为何指给沈砚看。",
     "plantedAt": 2,
-    "dueBy": 8,
-    "paidAt": null,
+    "dueBy": 9,
+    "paidAt": 8,
     "importance": 3
   },
   {
     "id": "g2-2",
     "text": "老周说“那行字早晚得有人写”，那行字指哪一行、留给谁写，与《引气篇》第七行空行是否同一处。",
     "plantedAt": 2,
-    "dueBy": 6,
+    "dueBy": 9,
+    "paidAt": 8,
+    "importance": 3
+  },
+  {
+    "id": "g8-1",
+    "text": "老周左眼窝里那行竖写的字是谁写的、写的是什么内容。",
+    "plantedAt": 8,
+    "dueBy": 12,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g8-2",
+    "text": "渠册中间被撕掉的那一页缺块底下压着的半个字，全字是什么、那一页记了什么。",
+    "plantedAt": 8,
+    "dueBy": 12,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g10-1",
+    "text": "沈砚抄书小册末页多出的那页油烟墨字迹“七月十六 抄十二页”是谁写的、为何笔迹与沈砚相同且刮不掉。",
+    "plantedAt": 10,
+    "dueBy": 18,
     "paidAt": null,
     "importance": 3
   },
   {
+    "id": "g10-2",
+    "text": "七月十六夜后山墨池边自举签是谁放入签筒的，与沈砚有何关联。",
+    "plantedAt": 10,
+    "dueBy": 18,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g7-1",
+    "text": "三层第七块架签被撬走，撬痕尽头留有嵌物残根，原物是什么、为何被取走。",
+    "plantedAt": 7,
+    "dueBy": 14,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g7-2",
+    "text": "后山界线处泥面竹片划痕与细干土从何而来，界线本身是什么。",
+    "plantedAt": 7,
+    "dueBy": 16,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g9-1",
+    "text": "三层东窗窗棂内侧老周刻的那行字写的是什么，他为何让沈砚擦这扇窗。",
+    "plantedAt": 9,
+    "dueBy": 12,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g9-2",
+    "text": "三层东窗下地板上那个人形拓印是谁留下的，为何与沈砚身量相仿且擦不掉。",
+    "plantedAt": 9,
+    "dueBy": 14,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
     "id": "g5-1",
-    "text": "阿满指根下“别”字后面两个被汗洇糊的字是什么，尤其最后一个轮廓像“我”的字。",
+    "text": "阿满指根下“别”字开头的三个小字，后两个被汗洇糊，最后一个轮廓像“我”，全句是什么。",
     "plantedAt": 5,
-    "dueBy": 10,
+    "dueBy": 12,
     "paidAt": null,
     "importance": 2
   },
