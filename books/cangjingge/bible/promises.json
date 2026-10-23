@@ -160,22 +160,6 @@
     "importance": 2
   },
   {
-    "id": "g10-1",
-    "text": "沈砚抄书小册末页多出的那页油烟墨字迹“七月十六 抄十二页”是谁写的、为何笔迹与沈砚相同且刮不掉。",
-    "plantedAt": 10,
-    "dueBy": 18,
-    "paidAt": null,
-    "importance": 3
-  },
-  {
-    "id": "g10-2",
-    "text": "七月十六夜后山墨池边自举签是谁放入签筒的，与沈砚有何关联。",
-    "plantedAt": 10,
-    "dueBy": 18,
-    "paidAt": null,
-    "importance": 3
-  },
-  {
     "id": "g7-1",
     "text": "三层第七块架签被撬走，撬痕尽头留有嵌物残根，原物是什么、为何被取走。",
     "plantedAt": 7,
@@ -236,6 +220,22 @@
     "text": "《引气篇》末页被换过页，是谁换的、原页上写的是什么。",
     "plantedAt": 3,
     "dueBy": 12,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g10-1",
+    "text": "玄清说“记得的人，这会儿已经在静室里了”，静室里关的是谁、与七月十六夜有何关联。",
+    "plantedAt": 10,
+    "dueBy": 14,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g10-2",
+    "text": "沈砚抄书小册末页多出的竖纹纸页与第五本空册封底字迹同源，竖纹纸从何而来、为何与沈砚笔迹一致。",
+    "plantedAt": 10,
+    "dueBy": 16,
     "paidAt": null,
     "importance": 2
   }
