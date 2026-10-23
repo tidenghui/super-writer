@@ -1,0 +1,11 @@
+[Unit]
+Description=Super Writer night shift, every day at 02:00
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+# 机器重启或停机错过了，开机后补跑一次
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

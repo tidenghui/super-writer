@@ -1,0 +1,32 @@
+[Unit]
+Description=Super Writer reader (web)
+Documentation=file:///opt/super-writer/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sw
+Group=sw
+WorkingDirectory=/opt/super-writer
+Environment=NODE_ENV=production
+Environment=PORT=8787
+Environment=HOST=127.0.0.1
+# 对外地址写进 .env.local 的 SITE_URL，这里不重复
+ExecStart=/opt/super-writer/node_modules/.bin/tsx src/serve/server.ts
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# 基本加固：只读全盘，只允许写这本书和运行日志
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/super-writer/books /opt/super-writer/runs
+# 允许本地回环（后面由 Caddy 反代）
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

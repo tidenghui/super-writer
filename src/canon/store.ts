@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, appendFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+  renameSync,
+  appendFileSync,
+} from 'node:fs';
 import { resolve } from 'node:path';
 import { bookDir } from '../engine/config.ts';
 import { countChars } from '../engine/json.ts';
@@ -94,6 +102,16 @@ export interface BookHandle {
 // ─────────────────────────────────────────────────────────────
 
 const read = (p: string) => readFileSync(p, 'utf8');
+
+/**
+ * 原子写：先写临时文件，再 rename。
+ * 流水线在写、阅读器在读，同一台机器上并发跑——不能让读者读到半截章节。
+ */
+export function writeAtomic(path: string, data: string): void {
+  const tmp = `${path}.tmp-${process.pid}`;
+  writeFileSync(tmp, data);
+  renameSync(tmp, path);
+}
 const readJson = <T>(p: string): T => JSON.parse(read(p)) as T;
 
 export function loadBook(slug: string): BookHandle {
@@ -178,8 +196,8 @@ export function saveChapter(
     createdAt: new Date().toISOString(),
   };
 
-  writeFileSync(resolve(dir, `${pad}.md`), body.trim() + '\n');
-  writeFileSync(resolve(dir, `${pad}.meta.json`), JSON.stringify(full, null, 2));
+  writeAtomic(resolve(dir, `${pad}.md`), body.trim() + '\n');
+  writeAtomic(resolve(dir, `${pad}.meta.json`), JSON.stringify(full, null, 2));
   return full;
 }
 
@@ -202,7 +220,7 @@ export function replaceFacts(slug: string, chapter: number, facts: Fact[]): void
     : [];
 
   const all = [...kept, ...facts];
-  writeFileSync(path, all.map((f) => JSON.stringify(f)).join('\n') + (all.length ? '\n' : ''));
+  writeAtomic(path, all.map((f) => JSON.stringify(f)).join('\n') + (all.length ? '\n' : ''));
 }
 
 /**
@@ -216,7 +234,7 @@ export function dropGeneratedPromises(promises: Promise_[], chapter: number): Pr
 
 export function savePromises(slug: string, promises: Promise_[]): void {
   const p = resolve(bookDir(slug), 'bible', 'promises.json');
-  writeFileSync(p, JSON.stringify(promises, null, 2) + '\n');
+  writeAtomic(p, JSON.stringify(promises, null, 2) + '\n');
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -273,5 +291,5 @@ export function patchChapterMeta(slug: string, n: number, patch: Partial<Chapter
   const path = resolve(bookDir(slug), 'chapters', `${pad}.meta.json`);
   if (!existsSync(path)) return;
   const cur = readJson<ChapterMeta>(path);
-  writeFileSync(path, JSON.stringify({ ...cur, ...patch }, null, 2));
+  writeAtomic(path, JSON.stringify({ ...cur, ...patch }, null, 2));
 }

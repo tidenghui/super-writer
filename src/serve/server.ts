@@ -19,6 +19,9 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CSS = readFileSync(resolve(HERE, 'theme.css'), 'utf8');
 const PORT = Number(process.env.PORT ?? 8787);
+// 默认只绑本机，由反向代理（Caddy/nginx）对外。想让 Node 直接对外再改 HOST=0.0.0.0
+const HOST = process.env.HOST ?? '127.0.0.1';
+const SITE_URL = (process.env.SITE_URL ?? `http://127.0.0.1:${PORT}`).replace(/\/$/, '');
 
 // ─────────────────────────────────────────────────────────────
 
@@ -40,6 +43,8 @@ function layout(title: string, body: string, theme: string | null = null): strin
 <meta name="color-scheme" content="light dark">
 <title>${esc(title)}</title>
 <link rel="stylesheet" href="/static/theme.css">
+<link rel="alternate" type="application/rss+xml" title="订阅" href="/feed.xml">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>📖</text></svg>">
 <script>
 (function(){try{
   var t=localStorage.getItem('sw:theme'); if(t) document.documentElement.dataset.theme=t;
@@ -224,6 +229,68 @@ function chapterPage(slug: string, n: number, theme: string | null, draft: boole
 }
 
 // ─────────────────────────────────────────────────────────────
+// 订阅与搜素
+// ─────────────────────────────────────────────────────────────
+
+/** 连载的命脉是订阅。没有 RSS，读者只能靠记忆回来看。 */
+function feedXml(slug: string): string {
+  const info = loadBookInfo(slug);
+  const chapters = publishingChapters(slug).slice(-20).reverse();
+
+  const items = chapters
+    .map((m) => {
+      const ch = loadChapter(slug, m.n);
+      const plain = (ch?.body ?? '').replace(/\s+/g, ' ').slice(0, 140);
+      const url = `${SITE_URL}/b/${slug}/${m.n}`;
+      return `  <item>
+    <title>${esc(`${m.n}. ${m.title}`)}</title>
+    <link>${esc(url)}</link>
+    <guid isPermaLink="true">${esc(url)}</guid>
+    <pubDate>${new Date(m.createdAt).toUTCString()}</pubDate>
+    <description>${esc(plain)}</description>
+  </item>`;
+    })
+    .join('\n');
+
+  const latest = chapters[0] ? new Date(chapters[0].createdAt).toUTCString() : new Date().toUTCString();
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <title>${esc(info.title)}</title>
+  <link>${esc(`${SITE_URL}/b/${slug}`)}</link>
+  <description>${esc(info.tagline ?? info.title)}</description>
+  <language>zh-CN</language>
+  <lastBuildDate>${latest}</lastBuildDate>
+${items}
+</channel>
+</rss>`;
+}
+
+function sitemapXml(): string {
+  const urls: string[] = [`${SITE_URL}/`];
+  for (const slug of listBooks()) {
+    urls.push(`${SITE_URL}/b/${slug}`);
+    for (const m of publishingChapters(slug)) urls.push(`${SITE_URL}/b/${slug}/${m.n}`);
+  }
+  const body = urls.map((u) => `  <url><loc>${esc(u)}</loc></url>`).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${body}
+</urlset>`;
+}
+
+/** 已发布的章：到第一个未定稿为止，连载不能有洞 */
+function publishingChapters(slug: string): ChapterMeta[] {
+  const out: ChapterMeta[] = [];
+  for (const m of listChapterMetas(slug)) {
+    if (m.status !== 'accepted') break;
+    out.push(m);
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────
 // 路由
 // ─────────────────────────────────────────────────────────────
 
@@ -234,12 +301,37 @@ const server = createServer((req, res) => {
   const send = (status: number, html: string) => {
     res.writeHead(status, {
       'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-cache',
+      // 章节内容一旦发布就不再变；短缓存既能扛流量又不至于让新章节延迟太久
+      'cache-control': status === 200 ? 'public, max-age=120' : 'no-cache',
     });
     res.end(html);
   };
 
   try {
+    if (path === '/healthz') {
+      const books = listBooks();
+      const chapters = books.reduce((n, b) => n + publishingChapters(b).length, 0);
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({ ok: true, books: books.length, chapters }));
+    }
+
+    if (path === '/robots.txt') {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      return res.end(`User-agent: *\nAllow: /\nSitemap: ${SITE_URL}/sitemap.xml\n`);
+    }
+
+    if (path === '/sitemap.xml') {
+      res.writeHead(200, { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'max-age=300' });
+      return res.end(sitemapXml());
+    }
+
+    if (path === '/feed.xml') {
+      const slug = url.searchParams.get('book') ?? listBooks()[0];
+      if (!slug) return send(404, layout('找不到', '<div class="wrap"><div class="empty">还没有书</div></div>'));
+      res.writeHead(200, { 'content-type': 'application/rss+xml; charset=utf-8', 'cache-control': 'max-age=300' });
+      return res.end(feedXml(slug));
+    }
+
     if (path === '/static/theme.css') {
       res.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'cache-control': 'max-age=60' });
       return res.end(CSS);
@@ -269,8 +361,17 @@ const server = createServer((req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`\n  阅读器  http://127.0.0.1:${PORT}\n`);
+server.listen(PORT, HOST, () => {
+  console.log(`\n  阅读器  http://${HOST}:${PORT}   对外地址 ${SITE_URL}\n`);
 });
+
+// 让 systemd / docker stop 能干净地关掉
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    console.log(`\n  收到 ${sig}，关闭`);
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3000).unref();
+  });
+}
 
 export type { ChapterMeta };

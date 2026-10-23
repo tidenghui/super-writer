@@ -1,0 +1,25 @@
+[Unit]
+Description=Super Writer night shift (audit + write one chapter)
+Documentation=file:///opt/super-writer/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sw
+Group=sw
+WorkingDirectory=/opt/super-writer
+Environment=NODE_ENV=production
+ExecStart=/opt/super-writer/node_modules/.bin/tsx src/cli.ts night
+# 一夜最多跑 40 分钟，跑不完就放弃，别把第二天早上堵住
+TimeoutStartSec=2400
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/super-writer/books /opt/super-writer/runs
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+StandardOutput=append:/opt/super-writer/runs/night.log
+StandardError=append:/opt/super-writer/runs/night.log

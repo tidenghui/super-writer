@@ -155,7 +155,7 @@
     "id": "g8-2",
     "text": "渠册中间被撕掉的那一页缺块底下压着的半个字，全字是什么、那一页记了什么。",
     "plantedAt": 8,
-    "dueBy": 12,
+    "dueBy": 13,
     "paidAt": null,
     "importance": 2
   },
@@ -196,7 +196,7 @@
     "text": "阿满指根下“别”字开头的三个小字，后两个被汗洇糊，最后一个轮廓像“我”，全句是什么。",
     "plantedAt": 5,
     "dueBy": 12,
-    "paidAt": null,
+    "paidAt": 11,
     "importance": 2
   },
   {
@@ -204,14 +204,14 @@
     "text": "那个拿阿满手写“沈砚”并留下墨痕的不认得的人是谁，他为何要阿满记住。",
     "plantedAt": 5,
     "dueBy": 12,
-    "paidAt": null,
+    "paidAt": 11,
     "importance": 2
   },
   {
     "id": "g3-1",
     "text": "《引气篇》末页第七行那一笔能自行前移，沈砚用笔尖一碰它就往前走半寸，这一笔最终会变成什么、要引向何处。",
     "plantedAt": 3,
-    "dueBy": 12,
+    "dueBy": 14,
     "paidAt": null,
     "importance": 2
   },
@@ -219,7 +219,7 @@
     "id": "g3-2",
     "text": "《引气篇》末页被换过页，是谁换的、原页上写的是什么。",
     "plantedAt": 3,
-    "dueBy": 12,
+    "dueBy": 13,
     "paidAt": null,
     "importance": 2
   },
@@ -236,6 +236,22 @@
     "text": "沈砚抄书小册末页多出的竖纹纸页与第五本空册封底字迹同源，竖纹纸从何而来、为何与沈砚笔迹一致。",
     "plantedAt": 10,
     "dueBy": 16,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g11-1",
+    "text": "门籍上七月十六夜沈砚的出阁回阁签名是谁补写的，补写用的第三支秃笔笔头藏在库房废料匣里，断口与十二页纸上的断口是否同一支笔。",
+    "plantedAt": 11,
+    "dueBy": 14,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g11-2",
+    "text": "沈砚手里那根方签头的“行”字假签是谁放进签筒底的，真“言”签去了哪里。",
+    "plantedAt": 11,
+    "dueBy": 15,
     "paidAt": null,
     "importance": 2
   }
