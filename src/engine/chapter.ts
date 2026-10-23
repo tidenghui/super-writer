@@ -1,6 +1,7 @@
 import { callLLM, spendSoFar } from './llm.ts';
 import { extractJson, countChars } from './json.ts';
 import { mapLimit } from './util.ts';
+import { isMock } from './mock.ts';
 import {
   bookBriefing,
   beatFor,
@@ -19,6 +20,7 @@ import {
   saveChapter,
   savePromises,
   type BookHandle,
+  type ChapterMeta,
   type Promise_,
   type Fact,
 } from '../canon/store.ts';
@@ -510,18 +512,18 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
       importance: np.importance,
     });
   }
-  savePromises(book.slug, promises);
-
   const facts: Fact[] = update.newFacts.map((f, i) => ({
     id: `f${n}-${i + 1}`,
     chapter: n,
     subject: f.subject,
     fact: f.fact,
   }));
-  appendFacts(book.slug, facts);
 
-  const meta = saveChapter(book.slug, n, plan.title, body, {
+  const chapterMeta: ChapterMeta = {
+    n,
+    title: plan.title,
     status: verdict.pass ? 'accepted' : 'draft',
+    wordCount: countChars(body),
     summary: update.summary,
     coldRead: tally(cold),
     critics: critiques.map((c) => ({
@@ -532,10 +534,21 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
     })),
     revisions,
     costCny: Number((spendSoFar().totalCny - costAtStart).toFixed(3)),
-  });
+    createdAt: new Date().toISOString(),
+  };
+
+  // mock 模式默认不写盘，免得占位文本混进书里
+  const persist = !isMock() || process.env.SW_MOCK_SAVE === '1';
+  if (persist) {
+    savePromises(book.slug, promises);
+    appendFacts(book.slug, facts);
+    saveChapter(book.slug, n, plan.title, body, chapterMeta);
+  } else {
+    log('归档', 'mock 模式：不写盘（要写盘设 SW_MOCK_SAVE=1）');
+  }
 
   console.log(
-    `\n  存盘：books/${book.slug}/chapters/${String(n).padStart(3, '0')}.md　${meta.wordCount} 字　¥${meta.costCny}\n`,
+    `\n  ${persist ? '存盘' : '演练'}：第${n}章《${plan.title}》　${chapterMeta.wordCount} 字　¥${chapterMeta.costCny}\n`,
   );
 
   return {
@@ -546,7 +559,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
     critiques,
     coldRead: cold,
     revisions,
-    costCny: meta.costCny ?? 0,
+    costCny: chapterMeta.costCny ?? 0,
     accepted: verdict.pass,
   };
 }

@@ -1,4 +1,5 @@
 import { resolveRole, type Role } from './config.ts';
+import { isMock, mockCall } from './mock.ts';
 import { logCall, sleep } from './util.ts';
 
 export interface CallOpts {
@@ -44,6 +45,17 @@ function budgetCny(): number {
  * 所有阶段都必须走这里——否则成本就统计不准了。
  */
 export async function callLLM(opts: CallOpts): Promise<CallResult> {
+  if (isMock()) {
+    logCall({
+      ts: new Date().toISOString(),
+      label: opts.label ?? opts.role,
+      mock: true,
+      system: opts.system,
+      user: opts.user,
+    });
+    return mockCall(opts);
+  }
+
   const r = resolveRole(opts.role);
   const label = opts.label ?? opts.role;
 
