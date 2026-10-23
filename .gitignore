@@ -9,3 +9,4 @@ dist/
 runs/
 books/*/chapters/*.meta.json
 .npm-cache/
+.deploy-key/
