@@ -11,6 +11,7 @@ import {
   promiseBrief,
   factsBrief,
   styleRules,
+  bookTitle,
 } from './context.ts';
 import { runAllCritics, type Critique, type Defect } from './critics.ts';
 import { runColdReaders, tally, type ColdReadResult } from './coldRead.ts';
@@ -70,7 +71,7 @@ const log = (stage: string, msg: string) => console.log(`  \x1b[2m${stage}\x1b[0
 async function planChapter(book: BookHandle, n: number): Promise<ChapterPlan> {
   const beat = beatFor(book, n);
 
-  const system = `你是《${book.slug}》这本书的策划。你不写正文，你只决定这一章要发生什么。
+  const system = `你是《${bookTitle(book)}》这本书的策划。你不写正文，你只决定这一章要发生什么。
 
 你的判断标准只有一个：这一章读完，读者会不会点下一章。
 
@@ -219,7 +220,7 @@ async function draft(
 ): Promise<string> {
   const castIds = [...new Set(plan.scenes.flatMap((s) => s.cast))];
 
-  const system = `你是《藏经阁的最后一页》的作者，正在写第 ${n} 章。
+  const system = `你是《${bookTitle(book)}》的作者，正在写第 ${n} 章。
 
 你要写的是**连载网络小说**，不是文学小说。读者在手机上读，一章三分钟。你要让他们读完想点「下一章」。
 
@@ -271,7 +272,7 @@ async function expandIfShort(book: BookHandle, n: number, body: string, target: 
 
   const res = await callLLM({
     role: 'writer',
-    system: `你是《藏经阁的最后一页》的作者。把下面这一章补长到 ${target} 字左右。`,
+    system: `你是《${bookTitle(book)}》的作者。把下面这一章补长到 ${target} 字左右。`,
     user: [
       styleRules(book),
       `## 现有正文（${len} 字）`,
@@ -320,7 +321,7 @@ async function revise(
     )
     .join('\n');
 
-  const system = `你是《藏经阁的最后一页》的修订编辑。你不是重写，你是修补。
+  const system = `你是《${bookTitle(book)}》的修订编辑。你不是重写，你是修补。
 
 ${styleRules(book)}
 

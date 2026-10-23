@@ -1,6 +1,7 @@
 import {
   loadChapter,
   loadFacts,
+  loadBookInfo,
   listChapterMetas,
   summaryIndex,
   openPromises,
@@ -21,6 +22,15 @@ export function bookBriefing(book: BookHandle): string {
     '## 世界设定（硬约束，不得违反）',
     b.world,
   ].join('\n\n');
+}
+
+/** 书名。提示词里必须用人话，不能把 slug 塞进去。 */
+export function bookTitle(book: BookHandle): string {
+  try {
+    return loadBookInfo(book.slug).title;
+  } catch {
+    return book.slug;
+  }
 }
 
 export function styleRules(book: BookHandle): string {
