@@ -46,7 +46,7 @@ async function doctor(): Promise<void> {
   for (const role of ['writer', 'critic', 'planner'] as const) {
     try {
       const r = resolveRole(role);
-      console.log(`  ${role.padEnd(9)} ${r.provider}/${r.model}  ✓`);
+      console.log(`  ${role.padEnd(9)} ${r.provider}/${r.model}  ✓  ${r.baseUrl}`);
     } catch (e) {
       ok = false;
       console.log(`  ${role.padEnd(9)} \x1b[31m${(e as Error).message.split('\n')[0]}\x1b[0m`);
@@ -60,6 +60,23 @@ async function doctor(): Promise<void> {
     console.log('\n  \x1b[33m先修好上面的问题：cp .env.example .env.local 然后填 key。\x1b[0m\n');
     process.exitCode = 1;
     return;
+  }
+
+  if (has('ping')) {
+    try {
+      const r = await callLLM({
+        role: 'writer',
+        system: '你是一台在自检的机器。',
+        user: '只回复两个字：就绪',
+        maxTokens: 16,
+        label: 'doctor-ping',
+      });
+      console.log(`\n  \x1b[32m✓ 真实调用成功\x1b[0m（${r.model}，${r.ms}ms）：${r.text.trim().slice(0, 20)}`);
+    } catch (e) {
+      console.log(`\n  \x1b[31m✗ 真实调用失败\x1b[0m：${(e as Error).message.split('\n')[0]}`);
+      process.exitCode = 1;
+      return;
+    }
   }
 
   console.log('\n  \x1b[32m配置就绪。\x1b[0m 跑一章试试：npm run chapter -- --book cangjingge --n 1\n');
@@ -170,7 +187,7 @@ async function auditBook(slug: string): Promise<DriftReport> {
 }`,
     ].join('\n\n---\n\n'),
     json: true,
-    maxTokens: 3000,
+    maxTokens: 12000,
     label: 'audit',
   });
 
@@ -245,7 +262,7 @@ function help(): void {
   console.log(`
   超级写作 · 无人值守中文连载引擎
 
-    npm run doctor                              检查环境和 API key
+    npm run doctor [--ping]                     检查环境和 API key（--ping 真实调一次）
     npm run chapter -- --n 1 [--book slug]      生成一章
     npm run canon   [--book slug]               看看故事圣经和伏笔账本
     npm run audit   [--book slug]               全书漂移审计

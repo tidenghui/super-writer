@@ -125,7 +125,7 @@ ${beat.pay?.length ? `需要在这一章回收的伏笔：${beat.pay.join('、')
     system,
     user,
     json: true,
-    maxTokens: 2048,
+    maxTokens: 8000,
     label: 'plan',
   });
 
@@ -167,7 +167,7 @@ ${styleRules(book)}`;
     system,
     user,
     json: true,
-    maxTokens: 3000,
+    maxTokens: 6000,
     label: `openings:${n}`,
     temperatureOverride: 1.2,
   });
@@ -196,7 +196,7 @@ ${styleRules(book)}`;
     system: '你是极其挑剔的中文小说编辑。你只选一个。',
     user: judgeUser,
     json: true,
-    maxTokens: 512,
+    maxTokens: 1000,
     label: 'opening-judge',
   });
 
@@ -250,6 +250,8 @@ ${styleRules(book)}
     `- 全章 ${plan.wordTarget} 字左右（上下浮动 300 字）。`,
     `- 章末最后一句要达成这个意图：${plan.endHook}`,
     `- 这一章绝对不能出现：${plan.mustNot.join('；')}`,
+    `- 只写场景表里的事件。不要新增情节、人物、物件——包括结尾不要多写一段。`,
+    `- 章末最后一句就停在钩子上，后面不要再写任何东西。`,
     `- 不要写「第X章」这种标题。不要写任何解释性的话。只输出正文。`,
   ].join('\n\n---\n\n');
 
@@ -257,7 +259,7 @@ ${styleRules(book)}
     role: 'writer',
     system,
     user,
-    maxTokens: 8000,
+    maxTokens: 12000,
     label: `draft:${n}`,
     ...(temperature !== undefined ? { temperatureOverride: temperature } : {}),
   });
@@ -282,7 +284,7 @@ async function expandIfShort(book: BookHandle, n: number, body: string, target: 
       `补的方式：增加具体的动作、物件的细节、角色之间没有说出口的那层意思。不要加新事件。`,
       `只输出补完后的完整正文。`,
     ].join('\n\n---\n\n'),
-    maxTokens: 8000,
+    maxTokens: 12000,
     label: `expand:${n}`,
   });
 
@@ -293,24 +295,57 @@ async function expandIfShort(book: BookHandle, n: number, body: string, target: 
 // 阶段 4：修订
 // ─────────────────────────────────────────────────────────────
 
+interface Patch {
+  find: string;
+  replace: string;
+}
+
+/**
+ * 应用补丁。
+ * 只接受「在正文里唯一出现」的 find —— 找不到或找到多处一律跳过，
+ * 宁可漏修，也不要改错地方。
+ */
+function applyPatches(body: string, patches: Patch[]): { body: string; applied: number; skipped: number } {
+  let out = body;
+  let applied = 0;
+  let skipped = 0;
+
+  for (const p of patches) {
+    const find = (p.find ?? '').trim();
+    if (find.length < 4) {
+      skipped++;
+      continue;
+    }
+    const first = out.indexOf(find);
+    if (first === -1 || out.indexOf(find, first + 1) !== -1) {
+      skipped++;
+      continue;
+    }
+    out = out.slice(0, first) + (p.replace ?? '') + out.slice(first + find.length);
+    applied++;
+  }
+  return { body: out, applied, skipped };
+}
+
+/**
+ * 修订 = 打补丁，不是重写。
+ *
+ * 早期版本让模型重写整章，结果每修一处就带进三处新错误（blocker 数在轮次间震荡）。
+ * 现在只允许它输出「原文 → 改文」的替换对，由引擎机械应用：
+ * 改不到就跳过，绝不误伤。
+ */
 async function revise(
   book: BookHandle,
   n: number,
   body: string,
   critiques: Critique[],
   cold: ColdReadResult[],
-): Promise<string> {
+): Promise<{ body: string; applied: number; skipped: number; fellBack: boolean }> {
   const actionable = critiques
     .flatMap((c) => c.defects.map((d) => ({ ...d, critic: c.critic })))
     .filter((d) => d.severity !== 'minor')
-    .slice(0, 14);
-
-  const defectList = actionable
-    .map(
-      (d, i) =>
-        `${i + 1}. [${d.critic}｜${d.severity}] 原文：「${d.quote}」\n   问题：${d.problem}\n   改法：${d.fix}`,
-    )
-    .join('\n\n');
+    .sort((a, b) => sevRank(b.severity) - sevRank(a.severity))
+    .slice(0, 12);
 
   const coldNotes = cold
     .map(
@@ -321,36 +356,80 @@ async function revise(
     )
     .join('\n');
 
-  const system = `你是《${bookTitle(book)}》的修订编辑。你不是重写，你是修补。
+  const system = `你是《${bookTitle(book)}》的修订编辑。你是拿镊子做手术的，不是拿斧子重写的。
 
 ${styleRules(book)}
 
 铁律：
-- 只改被点名的地方。没被点名的地方一个字都不要动。
-- 保留原有情节、顺序、长度。不许加新事件。
-- 不许把短句改成长句。
-- 输出修订后的完整正文。`;
+- 只输出「替换对」，不改的地方一个字都不要动。
+- find 必须是正文里**逐字存在、且只出现一次**的片段（10–60 字）。
+- replace 是改后的句子。长度与原文相当。
+- 不许新增情节、人物、物件。
+- 不许改变事件的顺序。
+- 如果某条意见你没法在不改动别处的前提下修掉，就跳过它。`;
 
   const user = [
     `## 待修订正文`,
     body,
-    `## 需要修的缺陷（按严重程度排）`,
-    defectList || '（没有硬伤，只做节奏优化）',
+    `## 要修的问题（按严重程度排）`,
+    actionable
+      .map(
+        (d, i) =>
+          `${i + 1}. [${d.critic}｜${d.severity}] 原文：「${d.quote}」\n   问题：${d.problem}\n   改法：${d.fix}`,
+      )
+      .join('\n\n'),
     `## 真实读者的反应`,
     coldNotes,
-    `## 任务`,
-    `改完这些缺陷，长度保持原样（±5%）。只输出修订后的完整正文，不要说明改了什么。`,
+    `## 输出`,
+    `只输出 JSON：{"patches":[{"find":"原文片段","replace":"改后片段"}]}`,
   ].join('\n\n---\n\n');
 
   const res = await callLLM({
     role: 'reviser',
     system,
     user,
+    json: true,
     maxTokens: 8000,
     label: `revise:${n}`,
   });
 
-  return res.text.trim();
+  let patches: Patch[] = [];
+  try {
+    patches = extractJson<{ patches: Patch[] }>(res.text).patches ?? [];
+  } catch {
+    patches = [];
+  }
+
+  const { body: patched, applied, skipped } = applyPatches(body, patches);
+
+  // 一个补丁都没打上，说明模型没按格式来；退回到整章重写，但只在有硬伤时
+  if (applied === 0 && blockers(critiques).length > 0) {
+    const fallback = await callLLM({
+      role: 'reviser',
+      system: `你是《${bookTitle(book)}》的修订编辑。
+
+${styleRules(book)}
+
+只改被点名的地方，保留情节、顺序、长度。输出修订后的完整正文。`,
+      user: [
+        `## 待修订正文`,
+        body,
+        `## 要修的问题`,
+        actionable.map((d, i) => `${i + 1}. 「${d.quote}」→ ${d.fix}`).join('\n'),
+        `## 输出`,
+        `只输出修订后的完整正文。`,
+      ].join('\n\n---\n\n'),
+      maxTokens: 12000,
+      label: `revise-full:${n}`,
+    });
+    return { body: fallback.text.trim(), applied: 0, skipped, fellBack: true };
+  }
+
+  return { body: patched, applied, skipped, fellBack: false };
+}
+
+function sevRank(s: string): number {
+  return s === 'blocker' ? 3 : s === 'major' ? 2 : 1;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -366,20 +445,46 @@ function avgScore(critiques: Critique[]): number {
   return critiques.reduce((s, c) => s + c.score, 0) / critiques.length;
 }
 
+function majors(critiques: Critique[]): Defect[] {
+  return critiques.flatMap((c) => c.defects.filter((d) => d.severity === 'major'));
+}
+
+/**
+ * 放行判据。
+ *
+ * 刻意不看「平均分」——批评家是被要求挑刺的，6 分意味着「合格但有毛病」，
+ * 不是「不及格」。把 7.5 当及格线会让每一章都卡死，而真正的判据是：
+ * 有没有硬伤、有没有一堆 major、真实读者会不会点下一章。
+ */
 function gate(
   critiques: Critique[],
   cold: ColdReadResult[],
   minVotes: number,
 ): { pass: boolean; why: string } {
-  const score = avgScore(critiques);
-  const hard = blockers(critiques);
   const votes = cold.filter((r) => r.willContinue).length;
+  const scores = critiques.map((c) => c.score);
+  const lowest = Math.min(...scores);
+  const weak = critiques.filter((c) => c.score <= 4).length;
+  const hard = blockers(critiques).length;
 
-  if (hard.length > 0) return { pass: false, why: `有 ${hard.length} 处硬伤（blocker）` };
-  if (score < 7.5) return { pass: false, why: `平均分 ${score.toFixed(1)} < 7.5` };
+  // 判据的锚是「读者的手会不会往下滑」，不是缺陷条数。
+  // 五个批评家每个都会写 5-6 条意见，拿条数当闸门，没有任何一章能过。
   if (votes < minVotes)
     return { pass: false, why: `冷读 ${votes}/${cold.length} 愿意继续，要求至少 ${minVotes}` };
-  return { pass: true, why: `平均分 ${score.toFixed(1)}，冷读 ${votes}/${cold.length}` };
+  if (lowest <= 3) return { pass: false, why: `有批评家给了 ${lowest} 分` };
+  if (weak >= 2) return { pass: false, why: `${weak} 位批评家打 4 分以下` };
+  if (hard >= 5) return { pass: false, why: `${hard} 处硬伤（blocker）` };
+
+  return {
+    pass: true,
+    why: `冷读 ${votes}/${cold.length}｜最低分 ${lowest}｜均分 ${avgScore(critiques).toFixed(1)}｜${hard} blocker`,
+  };
+}
+
+/** 比较两版稿子哪个更好：读者票 > 硬伤 > major 数 > 均分 */
+function qualityScore(critiques: Critique[], cold: ColdReadResult[]): number {
+  const votes = cold.filter((r) => r.willContinue).length;
+  return votes * 100 - blockers(critiques).length * 50 - majors(critiques).length * 5 + avgScore(critiques);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -416,7 +521,7 @@ async function recordCanon(book: BookHandle, n: number, title: string, body: str
 {"summary":"...","newFacts":[{"subject":"...","fact":"..."}],"promiseUpdates":[{"id":"p1","paidAt":${n}}],"newPromises":[{"text":"...","dueBy":${n + 5},"importance":2}]}`,
     ].join('\n\n---\n\n'),
     json: true,
-    maxTokens: 1500,
+    maxTokens: 2500,
     label: `canon:${n}`,
   });
 
@@ -459,7 +564,9 @@ export function profileFor(n: number): ChapterProfile {
   return {
     golden,
     openings: golden ? 8 : 4,
-    maxRevisions: golden ? 3 : 2,
+    // 修订的边际收益是负的：实测每多修一轮，评分反而下降。
+    // 更好的做法是独立多跑几版再挑（--candidates），所以这里只留一轮兜底。
+    maxRevisions: golden ? 1 : 1,
     minColdVotes: golden ? 3 : 2,
   };
 }
@@ -496,21 +603,41 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
   let critiques: Critique[] = [];
   let cold: ColdReadResult[] = [];
   let revisions = 0;
-  let best = { body, score: 0, critiques: [] as Critique[], cold: [] as ColdReadResult[] };
+  let best = { body, score: -Infinity, critiques: [] as Critique[], cold: [] as ColdReadResult[] };
   let verdict = { pass: false, why: '' };
+  let prevQuality = -Infinity;
 
   for (let round = 0; round <= maxRevisions; round++) {
     log('审稿', round === 0 ? '批评家 + 冷读并行开火…' : `第 ${round} 轮复审…`);
 
-    [critiques, cold] = await Promise.all([
+    const [cRun, dRun] = await Promise.all([
       runAllCritics(book, n, body),
       runColdReaders(book, n, body),
     ]);
+    critiques = cRun.ok;
+    cold = dRun.ok;
 
-    const score = avgScore(critiques);
+    for (const f of cRun.failed) console.log(`  \x1b[33m!\x1b[0m ${f.critic} 审稿失败：${f.error}`);
+    for (const f of dRun.failed) console.log(`  \x1b[33m!\x1b[0m ${f.persona} 冷读失败：${f.error}`);
+
+    // 无人值守时宁可这一章不过，也不要靠残废的评审团放行
+    if (critiques.length < 3) {
+      throw new Error(`审稿失败太多：只有 ${critiques.length}/5 个批评家返回结果，无法判断这一章能不能发`);
+    }
+    if (cold.length < 2) {
+      throw new Error(`冷读失败太多：只有 ${cold.length}/3 个分身返回结果`);
+    }
+
+    const score = qualityScore(critiques, cold);
     if (score > best.score) best = { body, score, critiques, cold };
 
-    verdict = gate(critiques, cold, profile.minColdVotes);
+    if (score < prevQuality) {
+      log('放行', '\x1b[33m修订之后反而变差，回退到上一版\x1b[0m');
+      break;
+    }
+    prevQuality = score;
+
+    verdict = gate(critiques, cold, Math.min(profile.minColdVotes, cold.length));
     log(
       '审稿',
       critiques.map((c) => `${c.critic} ${c.score}`).join('｜') +
@@ -522,7 +649,14 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
     if (round === maxRevisions) break;
 
     revisions++;
-    body = await revise(book, n, body, critiques, cold);
+    const r = await revise(book, n, body, critiques, cold);
+    body = r.body;
+    log(
+      '修订',
+      r.fellBack
+        ? '没有可应用的补丁，退回整章重写'
+        : `打了 ${r.applied} 个补丁，跳过 ${r.skipped} 个`,
+    );
   }
 
   // 用分数最高的那一版，而不是最后一版——修订有时会改坏

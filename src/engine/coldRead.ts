@@ -93,7 +93,7 @@ export async function coldRead(
     system: system(p),
     user: user(book, chapterNo, body),
     json: true,
-    maxTokens: 1024,
+    maxTokens: 1200,
     label: `coldread:${p.id}`,
   });
 
@@ -108,12 +108,31 @@ export async function coldRead(
   };
 }
 
-export function runColdReaders(
+export interface ColdRun {
+  ok: ColdReadResult[];
+  failed: Array<{ persona: string; error: string }>;
+}
+
+export async function runColdReaders(
   book: BookHandle,
   chapterNo: number,
   body: string,
-): Promise<ColdReadResult[]> {
-  return mapLimit(PERSONAS, 3, (p) => coldRead(book, chapterNo, body, p));
+): Promise<ColdRun> {
+  const settled = await mapLimit(PERSONAS, PERSONAS.length, async (p) => {
+    try {
+      return { p, res: await coldRead(book, chapterNo, body, p) };
+    } catch (e) {
+      return { p, err: (e as Error).message.split('\n')[0] ?? 'unknown' };
+    }
+  });
+
+  const ok: ColdReadResult[] = [];
+  const failed: Array<{ persona: string; error: string }> = [];
+  for (const r of settled) {
+    if ('res' in r && r.res) ok.push(r.res);
+    else failed.push({ persona: r.p.name, error: ('err' in r && r.err) || 'unknown' });
+  }
+  return { ok, failed };
 }
 
 export function tally(results: ColdReadResult[]): { votes: number; total: number; notes: string[] } {

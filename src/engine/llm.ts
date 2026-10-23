@@ -66,13 +66,15 @@ export async function callLLM(opts: CallOpts): Promise<CallResult> {
     );
   }
 
+  let maxTokens = opts.maxTokens ?? 4096;
+
   const body: Record<string, unknown> = {
     model: r.model,
     messages: [
       { role: 'system', content: opts.system },
       { role: 'user', content: opts.user },
     ],
-    max_tokens: opts.maxTokens ?? 4096,
+    max_tokens: maxTokens,
     stream: false,
   };
 
@@ -112,12 +114,46 @@ export async function callLLM(opts: CallOpts): Promise<CallResult> {
       }
 
       const data = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
+        choices?: Array<{
+          finish_reason?: string;
+          message?: { content?: string; reasoning_content?: string };
+        }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
 
-      const text = data.choices?.[0]?.message?.content ?? '';
-      if (!text) throw new Error('模型返回了空内容');
+      const choice = data.choices?.[0];
+      const text = choice?.message?.content ?? '';
+      const finish = choice?.finish_reason ?? '?';
+      const reasoningLen = (choice?.message?.reasoning_content ?? '').length;
+
+      if (!text) {
+        // 推理模型会把 token 先花在思考上。切断了就会 content 为空、finish_reason=length。
+        // 这种情况必须记日志，否则线上就是一封「模型返回了空内容」，什么都查不到。
+        logCall({
+          ts: new Date().toISOString(),
+          label,
+          role: opts.role,
+          model: r.model,
+          failed: true,
+          finish,
+          maxTokens,
+          reasoningLen,
+          usage: data.usage ?? null,
+          user: opts.user.slice(0, 2000),
+        });
+
+        if (finish === 'length' && attempt < 3) {
+          maxTokens = Math.min(maxTokens * 2, 32000);
+          (body as { max_tokens: number }).max_tokens = maxTokens;
+          console.warn(
+            `  \x1b[33m!\x1b[0m ${label} 被 max_tokens=${maxTokens / 2} 截断（推理占了 ${reasoningLen} 字），翻倍重试`,
+          );
+          continue;
+        }
+        throw new Error(
+          `模型返回了空内容（${label}｜finish_reason=${finish}｜max_tokens=${maxTokens}｜推理 ${reasoningLen} 字）`,
+        );
+      }
 
       const usage = {
         in: data.usage?.prompt_tokens ?? 0,

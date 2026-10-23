@@ -13,20 +13,70 @@
     }
   },
   "pricingCnyPerMTok": {
-    "deepseek-chat": { "in": 2, "out": 8 },
-    "deepseek-reasoner": { "in": 4, "out": 16 },
-    "moonshot-v1-32k": { "in": 24, "out": 24 }
+    "deepseek-chat": {
+      "in": 2,
+      "out": 8
+    },
+    "deepseek-reasoner": {
+      "in": 4,
+      "out": 16
+    },
+    "moonshot-v1-32k": {
+      "in": 24,
+      "out": 24
+    }
   },
   "roles": {
-    "showrunner": { "provider": "deepseek", "model": "deepseek-reasoner", "temperature": 0.9 },
-    "planner": { "provider": "deepseek", "model": "deepseek-reasoner", "temperature": 0.9 },
-    "opener": { "provider": "deepseek", "model": "deepseek-chat", "temperature": 1.1 },
-    "writer": { "provider": "deepseek", "model": "deepseek-chat", "temperature": 0.95 },
-    "reviser": { "provider": "deepseek", "model": "deepseek-chat", "temperature": 0.5 },
-    "critic": { "provider": "deepseek", "model": "deepseek-reasoner", "temperature": 0.2 },
-    "coldReader": { "provider": "deepseek", "model": "deepseek-chat", "temperature": 0.8 },
-    "auditor": { "provider": "deepseek", "model": "deepseek-reasoner", "temperature": 0.3 },
-    "canonRecorder": { "provider": "deepseek", "model": "deepseek-chat", "temperature": 0.1 },
-    "summarizer": { "provider": "deepseek", "model": "deepseek-chat", "temperature": 0.2 }
-  }
+    "showrunner": {
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "temperature": 0.9
+    },
+    "planner": {
+      "provider": "deepseek",
+      "model": "deepseek-reasoner",
+      "temperature": 0.9
+    },
+    "opener": {
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "temperature": 1.1
+    },
+    "writer": {
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "temperature": 0.95
+    },
+    "reviser": {
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "temperature": 0.5
+    },
+    "critic": {
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "temperature": 0.2
+    },
+    "coldReader": {
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "temperature": 0.8
+    },
+    "auditor": {
+      "provider": "deepseek",
+      "model": "deepseek-reasoner",
+      "temperature": 0.3
+    },
+    "canonRecorder": {
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "temperature": 0.1
+    },
+    "summarizer": {
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "temperature": 0.2
+    }
+  },
+  "_note": "不要给角色加 reasoningEffort：实测传这个参数反而会开启推理，更慢更贵。deepseek-reasoner 永远推理，deepseek-chat 不传该参数时零推理。"
 }

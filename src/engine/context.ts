@@ -25,6 +25,11 @@ export function bookBriefing(book: BookHandle): string {
 }
 
 /** 书名。提示词里必须用人话，不能把 slug 塞进去。 */
+/** 只有前提——给不需要世界全貌的批评家用 */
+export function premiseOnly(book: BookHandle): string {
+  return book.bible.premise;
+}
+
 export function bookTitle(book: BookHandle): string {
   try {
     return loadBookInfo(book.slug).title;

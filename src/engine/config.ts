@@ -4,16 +4,47 @@ import { fileURLToPath } from 'node:url';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** 先 .env.local 再 .env；后加载的不覆盖已存在的键 */
-export function loadEnv(): void {
-  for (const name of ['.env.local', '.env']) {
-    const p = resolve(ROOT, name);
-    if (!existsSync(p)) continue;
-    try {
-      process.loadEnvFile(p);
-    } catch {
-      /* 文件格式有问题就跳过，不要因此启动失败 */
+/**
+ * 极简 .env 解析。
+ *
+ * 不用 process.loadEnvFile 是因为它的语义是「不覆盖已存在的环境变量」——
+ * 而开发机上经常已经有一些同名变量（比如指向内部网关的 DEEPSEEK_BASE_URL），
+ * 那会把项目自己的配置静默盖掉，非常难查。这里明确优先级：
+ *
+ *   .env.local（本地私有，最高）> 进程环境变量 > .env（只补缺）
+ */
+function parseEnvFile(path: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const rawLine of readFileSync(path, 'utf8').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).replace(/^export\s+/, '').trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
     }
+    if (key) out[key] = value;
+  }
+  return out;
+}
+
+export function loadEnv(): void {
+  // .env 只补缺：不覆盖已经存在的变量
+  const base = resolve(ROOT, '.env');
+  if (existsSync(base)) {
+    for (const [k, v] of Object.entries(parseEnvFile(base))) {
+      if (process.env[k] === undefined) process.env[k] = v;
+    }
+  }
+  // .env.local 强制覆盖：它就是这台机器上这个项目的真相
+  const local = resolve(ROOT, '.env.local');
+  if (existsSync(local)) {
+    Object.assign(process.env, parseEnvFile(local));
   }
 }
 

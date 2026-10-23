@@ -2,7 +2,7 @@ import { callLLM } from './llm.ts';
 import { extractJson } from './json.ts';
 import { mapLimit } from './util.ts';
 import type { BookHandle } from '../canon/store.ts';
-import { bookBriefing, factsBrief, promiseBrief, styleRules } from './context.ts';
+import { bookBriefing, factsBrief, premiseOnly, promiseBrief, styleRules } from './context.ts';
 
 export type Severity = 'blocker' | 'major' | 'minor';
 
@@ -46,6 +46,13 @@ const OUTPUT_CONTRACT = `输出格式（严格遵守，只输出 JSON）：
     }
   ]
 }
+
+severity 的定义（严格照此使用）：
+- blocker：读者会当场出戏或看不懂。只包括——语法错到读不通、前文没有的信息突然出现、
+  视角/人称崩了、同一件事两次说法互相矛盾。
+- major：明显是毛病，但读者会皱眉继续读。
+- minor：锦上添花级别的建议。
+- 拿不准的，一律不要用 blocker。
 
 铁律：
 - quote 必须逐字出现在正文里。找不到依据的批评，一律不要写。
@@ -143,6 +150,8 @@ function criticUser(
 ): string {
   const parts = [
     styleRules(book),
+    // 每个批评家都要知道这本书的类型契约，否则会按写实标准把超自然设定"修"掉
+    premiseOnly(book),
     def.needsCanon ? bookBriefing(book) : '',
     def.needsCanon ? promiseBrief(book, chapterNo) : '',
     def.needsCanon ? factsBrief(book, chapterNo) : '',
@@ -159,8 +168,11 @@ function verifyQuotes(defects: Defect[], body: string): { kept: Defect[]; droppe
 
   for (const d of defects) {
     const q = (d.quote ?? '').replace(/\s+/g, '').replace(/^…+|…+$/g, '');
-    if (q.length >= 4 && flat.includes(q)) kept.push(d);
-    else dropped++;
+    if (q.length >= 4 && flat.includes(q)) {
+      // 模型偶尔会漏掉 severity，不能因此假定它严重，也不能因此崩
+      const sev = d.severity === 'blocker' || d.severity === 'major' ? d.severity : 'minor';
+      kept.push({ ...d, severity: sev });
+    } else dropped++;
   }
   return { kept, dropped };
 }
@@ -176,7 +188,7 @@ export async function runCritic(
     system: criticSystem(def),
     user: criticUser(book, chapterNo, body, def),
     json: true,
-    maxTokens: 2048,
+    maxTokens: 3000,
     label: `critic:${def.id}`,
   });
 
@@ -199,12 +211,35 @@ export async function runCritic(
   };
 }
 
-export function runAllCritics(
+export interface CriticsRun {
+  ok: Critique[];
+  failed: Array<{ critic: string; error: string }>;
+}
+
+/**
+ * 五个批评家并行。单个失败不许拖垮整章——无人值守的夜里，
+ * 一个模型抽风就让整本书停更是最蠢的失败方式。
+ */
+export async function runAllCritics(
   book: BookHandle,
   chapterNo: number,
   body: string,
-): Promise<Critique[]> {
-  return mapLimit(CRITICS, 3, (def) => runCritic(book, chapterNo, body, def));
+): Promise<CriticsRun> {
+  const settled = await mapLimit(CRITICS, CRITICS.length, async (def) => {
+    try {
+      return { def, res: await runCritic(book, chapterNo, body, def) };
+    } catch (e) {
+      return { def, err: (e as Error).message.split('\n')[0] ?? 'unknown' };
+    }
+  });
+
+  const ok: Critique[] = [];
+  const failed: Array<{ critic: string; error: string }> = [];
+  for (const r of settled) {
+    if ('res' in r && r.res) ok.push(r.res);
+    else failed.push({ critic: r.def.name, error: ('err' in r && r.err) || 'unknown' });
+  }
+  return { ok, failed };
 }
 
 function clamp(n: number): number {
