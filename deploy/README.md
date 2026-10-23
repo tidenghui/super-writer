@@ -43,7 +43,7 @@ sudo nano .env.local
 
 ```bash
 DEEPSEEK_API_KEY=sk-xxxxxxxx
-SITE_URL=https://你的域名
+SITE_URL=https://tidenghui.com
 ```
 
 > `SITE_URL` 决定 RSS 和 sitemap 里的绝对链接，不填会写成 127.0.0.1。
@@ -69,7 +69,7 @@ sudo apt update && sudo apt install -y caddy
 
 # 配站点
 sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
-sudo nano /etc/caddy/Caddyfile      # 把 example.com 换成你的域名
+sudo nano /etc/caddy/Caddyfile      # 确认域名是 tidenghui.com
 sudo mkdir -p /var/log/caddy && sudo chown caddy:caddy /var/log/caddy
 sudo systemctl reload caddy
 ```
@@ -79,8 +79,8 @@ Caddy 会自动申请证书。前提：域名的 A 记录已经指向这台机�
 验证：
 
 ```bash
-curl -s https://你的域名/healthz     # {"ok":true,"books":1,"chapters":10}
-curl -s https://你的域名/feed.xml | head
+curl -s https://tidenghui.com/healthz     # {"ok":true,"books":1,"chapters":10}
+curl -s https://tidenghui.com/feed.xml | head
 ```
 
 ---

@@ -235,3 +235,42 @@ a { color: inherit; text-decoration: none; }
   font-size: 0.9rem;
   letter-spacing: 0.06em;
 }
+
+
+/* ── 首页书卡 ─────────────────────────── */
+.book-card {
+  display: block;
+  padding: 1.6rem 1.5rem 1.4rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.book-card:hover { border-color: var(--accent); background: var(--paper-soft); }
+
+.book-card-title {
+  font-size: 1.32rem;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.7rem;
+}
+
+.book-card-tag {
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.8;
+  margin-bottom: 1rem;
+}
+
+.book-card-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  margin-bottom: 1.2rem;
+}
+
+.book-card-cta {
+  font-size: 0.82rem;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+}

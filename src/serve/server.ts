@@ -22,6 +22,8 @@ const PORT = Number(process.env.PORT ?? 8787);
 // 默认只绑本机，由反向代理（Caddy/nginx）对外。想让 Node 直接对外再改 HOST=0.0.0.0
 const HOST = process.env.HOST ?? '127.0.0.1';
 const SITE_URL = (process.env.SITE_URL ?? `http://127.0.0.1:${PORT}`).replace(/\/$/, '');
+const SITE_NAME = process.env.SITE_NAME ?? '提灯会';
+const SITE_TAGLINE = process.env.SITE_TAGLINE ?? '每晚，多一盏灯。';
 
 // ─────────────────────────────────────────────────────────────
 
@@ -41,10 +43,10 @@ function layout(title: string, body: string, theme: string | null = null): strin
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>${esc(title)}</title>
+<title>${esc(title === SITE_NAME ? title : `${title} · ${SITE_NAME}`)}</title>
 <link rel="stylesheet" href="/static/theme.css">
 <link rel="alternate" type="application/rss+xml" title="订阅" href="/feed.xml">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>📖</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='13' y='1' width='6' height='3' rx='1' fill='%23b08a63'/><path d='M16 5c5 0 8 3 8 7v6c0 4-3 6-8 6s-8-2-8-6v-6c0-4 3-7 8-7z' fill='%23d9694f'/><path d='M16 8c3 0 5 2 5 5v4c0 2-2 3-5 3s-5-1-5-3v-4c0-3 2-5 5-5z' fill='%23f2a07b'/><rect x='14' y='24' width='4' height='4' rx='1' fill='%23b08a63'/><rect x='15' y='28' width='2' height='3' fill='%23b08a63'/></svg>">
 <script>
 (function(){try{
   var t=localStorage.getItem('sw:theme'); if(t) document.documentElement.dataset.theme=t;
@@ -54,6 +56,9 @@ function layout(title: string, body: string, theme: string | null = null): strin
 </head>
 <body>
 ${body}
+<footer style="margin:4rem auto 2rem;max-width:34rem;padding:0 1.4rem;font-size:.72rem;color:var(--muted);letter-spacing:.08em;text-align:center">
+  ${esc(SITE_NAME)} · <a href="/feed.xml" style="color:inherit">订阅</a>
+</footer>
 </body>
 </html>`;
 }
@@ -98,19 +103,24 @@ function libraryPage(theme: string | null): string {
   const rows = listBooks()
     .map((slug) => {
       const info = loadBookInfo(slug);
-      const chapters = listChapterMetas(slug).filter((c) => c.status === 'accepted');
-      return `<a class="toc-row" href="/b/${esc(slug)}">
-        <span class="toc-title">${esc(info.title)}</span>
-        <span class="toc-words">${chapters.length ? `${chapters.length} 章` : '即将开始'}</span>
+      const chapters = publishingChapters(slug);
+      const meta = [info.genre, chapters.length ? `${chapters.length} 章` : '即将开始']
+        .filter(Boolean)
+        .join(' · ');
+      return `<a class="book-card" href="/b/${esc(slug)}">
+        <div class="book-card-title">${esc(info.title)}</div>
+        ${info.tagline ? `<div class="book-card-tag">${esc(info.tagline)}</div>` : ''}
+        <div class="book-card-meta">${esc(meta)}</div>
+        <div class="book-card-cta">开始阅读 →</div>
       </a>`;
     })
     .join('');
 
   return layout(
-    '书架',
-    `<div class="topbar"><span>书架</span>${TOOLS}</div>
-     <div class="wrap"><div class="book-head"><h1 class="book-title">书架</h1>
-     <p class="book-meta">每天更新的连载</p></div>
+    SITE_NAME,
+    `<div class="topbar"><span>${esc(SITE_NAME)}</span>${TOOLS}</div>
+     <div class="wrap"><div class="book-head"><h1 class="book-title">${esc(SITE_NAME)}</h1>
+     <p class="book-meta">${esc(SITE_TAGLINE)}</p></div>
      <div class="toc">${rows || '<div class="empty">还没有书</div>'}</div></div>
      ${SCRIPT}`,
     theme,
@@ -151,7 +161,7 @@ function tocPage(slug: string, theme: string | null, draft: boolean): string {
 
   return layout(
     info.title,
-    `<div class="topbar"><a href="/">← 书架</a>${TOOLS}</div>
+    `<div class="topbar"><a href="/">← ${esc(SITE_NAME)}</a>${TOOLS}</div>
      <div class="wrap">
        <div class="book-head">
          <h1 class="book-title">${esc(info.title)}</h1>
@@ -212,7 +222,7 @@ function chapterPage(slug: string, n: number, theme: string | null, draft: boole
 
   return layout(
     `${ch.meta.title} · ${info.title}`,
-    `<div class="topbar"><a href="/b/${esc(slug)}">← 目录</a>${TOOLS}</div>
+    `<div class="topbar"><a href="/b/${esc(slug)}">← 目录</a><span>${esc(SITE_NAME)}</span>${TOOLS}</div>
      <div class="wrap page">
        <div class="chapter-head">
          <div class="chapter-no">第 ${n} 章</div>
@@ -257,7 +267,7 @@ function feedXml(slug: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
 <channel>
-  <title>${esc(info.title)}</title>
+  <title>${esc(`${info.title} · ${SITE_NAME}`)}</title>
   <link>${esc(`${SITE_URL}/b/${slug}`)}</link>
   <description>${esc(info.tagline ?? info.title)}</description>
   <language>zh-CN</language>

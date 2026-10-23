@@ -1,8 +1,8 @@
-# 把 example.com 换成你的域名。
+# 提灯会 · 自动 HTTPS
 # Caddy 会自动申请并续期 Let's Encrypt 证书——前提是域名已经解析到这台机器的公网 IP，
 # 且 80 / 443 端口没有被占用。
 
-example.com {
+tidenghui.com {
 	encode zstd gzip
 
 	# 安全响应头。这个站是只读的，没有登录也没有表单。
