@@ -3,7 +3,7 @@ import { extractJson, countChars } from './json.ts';
 import { mapLimit } from './util.ts';
 import { isMock } from './mock.ts';
 import { applyPatches, type Patch } from './patch.ts';
-import { lintProse, formatViolations } from './lint.ts';
+import { lintProse, formatViolations, chapterShape } from './lint.ts';
 import {
   bookBriefing,
   beatFor,
@@ -271,6 +271,9 @@ ${styleRules(book)}
     `- 同一段描写不许出现两次。场景之间必须有明确的时间标记（几点、多久之后、天亮了），不许从「坐到天亮」直接跳到「醒了」。`,
     `- 章末的反转不能和前面已经写出来的事实打架。`,
     `- 章末最后一句就停在钩子上，后面不要再写任何东西。`,
+    `- 悬念必须来自具体、可数、可验证的异常——时间过了多久、某个东西变了没有、出现了几次。`,
+    `- 不许靠人物之间绕圈子说话来制造悬念。一句话能说清的事不许拆成八句。对话段落不要超过全章的一半。`,
+    `- 段落不要碎成一地。叙述段落要有 2–4 句连在一起，只在强调、转折、或节奏需要停顿的地方才单独成段。全章平均每段不少于 18 字。`,
     `- 不要写「第X章」这种标题。不要写任何解释性的话。只输出正文。`,
   ].join('\n\n---\n\n');
 
@@ -643,6 +646,18 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
   body = await expandIfShort(book, n, body, plan.wordTarget);
   log('起草', `初稿 ${countChars(body)} 字`);
   ({ body } = await cleanDraft(book, n, body));
+
+  const shape = chapterShape(body);
+  log(
+    '章形',
+    `${shape.paragraphs} 段｜对话 ${Math.round(shape.dialogueRatio * 100)}%｜平均 ${shape.avgParaLen} 字/段`,
+  );
+  if (shape.dialogueRatio > 0.6) {
+    log('章形', '\x1b[33m对话占比过高——这一章主要在靠人物说话推进，而不是靠事件。\x1b[0m');
+  }
+  if (shape.avgParaLen < 18) {
+    log('章形', '\x1b[33m段落过碎——每句话都单独成段，读起来像聊天记录。\x1b[0m');
+  }
 
   let critiques: Critique[] = [];
   let cold: ColdReadResult[] = [];

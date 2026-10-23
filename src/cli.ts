@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadEnv, ROOT, runsDir, resolveRole, checkCriticDiversity } from './engine/config.ts';
 import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapter } from './engine/chapter.ts';
-import { runColdReaders, firstScreenAll } from './engine/coldRead.ts';
+import { runColdReaders, firstScreenAll, comparePair } from './engine/coldRead.ts';
 import { readFileSync } from 'node:fs';
 import { enableCallLog } from './engine/util.ts';
 import { callLLM } from './engine/llm.ts';
@@ -160,6 +160,48 @@ async function cmdFirstScreen(): Promise<void> {
       if (r.stoppedAt) console.log(`      差点划走：「${r.stoppedAt}」`);
     }
   }
+  console.log('');
+}
+
+/** 两两对比给章节的开头排名——绝对打分区分不出来，逼着选才知道谁最弱 */
+async function cmdCompare(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const book = loadBook(slug);
+  const metas = listChapterMetas(slug).filter((m) => m.status === 'accepted');
+
+  const dir = resolve(runsDir(slug), `compare-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  const chapters = metas
+    .map((m) => {
+      const ch = loadChapter(slug, m.n);
+      return ch ? { n: m.n, text: ch.body.slice(0, 320) } : null;
+    })
+    .filter((c): c is { n: number; text: string } => !!c);
+
+  const wins = new Map<number, number>();
+  for (const c of chapters) wins.set(c.n, 0);
+
+  for (let i = 0; i < chapters.length; i++) {
+    for (let j = i + 1; j < chapters.length; j++) {
+      const a = chapters[i]!;
+      const b = chapters[j]!;
+      const rs = await comparePair(book, a, b);
+      for (const r of rs) {
+        if (r.winner === 'a') wins.set(a.n, (wins.get(a.n) ?? 0) + 1);
+        else if (r.winner === 'b') wins.set(b.n, (wins.get(b.n) ?? 0) + 1);
+      }
+      const aw = rs.filter((r) => r.winner === 'a').length;
+      const bw = rs.filter((r) => r.winner === 'b').length;
+      console.log(`  第${a.n}章 vs 第${b.n}章　${aw} : ${bw}`);
+      for (const r of rs) console.log(`     ${r.persona}→ ${r.winner === 'a' ? a.n : r.winner === 'b' ? b.n : '都不'}　${r.why}`);
+    }
+  }
+
+  const ranked = [...wins.entries()].sort((x, y) => y[1] - x[1]);
+  console.log('\n  开头排名（胜场）');
+  for (const [n, w] of ranked) console.log(`    第 ${n} 章　${w} 胜`);
   console.log('');
 }
 
@@ -396,6 +438,7 @@ function help(): void {
     npm run chapter -- --n 1 [--book slug]      生成一章
     npm run canon   [--book slug]               看看故事圣经和伏笔账本
     npm run firstscreen [--n 1 | --all]         首屏测试：只看开头 320 字
+    npm run compare                             两两对比，给各章开头排名
     npm run calibrate                           标定读者分身：烂稿必须被拒绝
     npm run reread  [--n 1 | --all]             重跑读者测（不改正文）
     npm run fix     -- --n 3 --m "批注"          按人工批注定点修订一章
@@ -428,6 +471,8 @@ async function main(): Promise<void> {
       return cmdCalibrate();
     case 'firstscreen':
       return cmdFirstScreen();
+    case 'compare':
+      return cmdCompare();
     case 'fix':
       return cmdFix();
     case 'audit':

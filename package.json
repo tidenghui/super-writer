@@ -19,7 +19,8 @@
     "fix": "tsx src/cli.ts fix",
     "reread": "tsx src/cli.ts reread",
     "calibrate": "tsx src/cli.ts calibrate",
-    "firstscreen": "tsx src/cli.ts firstscreen"
+    "firstscreen": "tsx src/cli.ts firstscreen",
+    "compare": "tsx src/cli.ts compare"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

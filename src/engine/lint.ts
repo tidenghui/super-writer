@@ -114,3 +114,29 @@ export function formatViolations(vs: Violation[]): string {
     .map((v, i) => `${i + 1}. [${v.kind}] ${v.rule}\n   原句：${v.sentence}`)
     .join('\n');
 }
+
+
+/** 章形：段数、对话占比、平均段长。连载注水的第一征兆就是对话占比飙升。 */
+export interface Shape {
+  paragraphs: number;
+  dialogue: number;
+  dialogueRatio: number;
+  avgParaLen: number;
+}
+
+export function chapterShape(body: string): Shape {
+  const paras = body
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const dialogue = paras.filter((p) => /^[“"「]/.test(p)).length;
+  const totalChars = paras.reduce((n, p) => n + p.length, 0);
+
+  return {
+    paragraphs: paras.length,
+    dialogue,
+    dialogueRatio: paras.length ? dialogue / paras.length : 0,
+    avgParaLen: paras.length ? Math.round(totalChars / paras.length) : 0,
+  };
+}

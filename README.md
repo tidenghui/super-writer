@@ -96,6 +96,18 @@ npm run read     # http://127.0.0.1:8787
 - `?theme=dark` / `?theme=light` 强制主题（调试用）
 - 字号三档、昼夜切换、按键 ← → 翻页、阅读位置记忆
 
+## 质检命令
+
+```bash
+npm run calibrate            # 标定读者分身：烂稿必须被拒（换模型后必跑）
+npm run firstscreen -- --all # 首屏测试：只看开头 320 字，会不会继续滑
+npm run reread -- --all      # 改过正文后重跑读者测
+npm run compare              # 两两对比，给各章开头排名
+npm run audit                # 通读全书找漂移
+npm run fix -- --n 3 --m "批注"   # 人工批注定点修订
+npm run recanon -- --n 3     # 重算某章的事实与伏笔
+```
+
 ## 无人值守
 
 ```bash

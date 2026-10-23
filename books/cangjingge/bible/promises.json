@@ -112,22 +112,6 @@
     "importance": 2
   },
   {
-    "id": "g3-1",
-    "text": "《引气篇》底本第七行那一笔是谁写的（笔迹与主角相同但主角未动笔），以及该页为何被换过。",
-    "plantedAt": 3,
-    "dueBy": 10,
-    "paidAt": null,
-    "importance": 3
-  },
-  {
-    "id": "g3-2",
-    "text": "主角丹田内散成七个清晰字“秋七月，他还活着”意味着什么。",
-    "plantedAt": 3,
-    "dueBy": 12,
-    "paidAt": null,
-    "importance": 3
-  },
-  {
     "id": "g4-1",
     "text": "七天前主角抄完十二页却无记忆、未领墨，那十二页抄的是什么，是谁用油烟墨代签了“沈砚”。",
     "plantedAt": 4,
@@ -156,6 +140,22 @@
     "text": "沈砚把带自己笔迹的纸屑含在舌下，并重新推开东窗，他要做什么。",
     "plantedAt": 2,
     "dueBy": 5,
+    "paidAt": null,
+    "importance": 2
+  },
+  {
+    "id": "g3-1",
+    "text": "《引气篇》底本第七行那一笔在沈砚用笔尖描时自行前移半寸，这一笔的来历和自行移动的原因是什么。",
+    "plantedAt": 3,
+    "dueBy": 10,
+    "paidAt": null,
+    "importance": 3
+  },
+  {
+    "id": "g3-2",
+    "text": "沈砚丹田内散成七个清晰字“秋七月，他还活着”，这七个字与抄本上反复出现的字句有何关联。",
+    "plantedAt": 3,
+    "dueBy": 12,
     "paidAt": null,
     "importance": 2
   }

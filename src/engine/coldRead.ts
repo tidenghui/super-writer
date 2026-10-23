@@ -190,6 +190,65 @@ export function firstScreenAll(
   return mapLimit(PERSONAS, PERSONAS.length, (_, i) => firstScreen(book, chapterNo, opening, i));
 }
 
+/**
+ * 两两对比。
+ *
+ * 绝对打分没有区分度——五个 3/3 并列，谁强谁弱说不出来。
+ * 逼着选一个，才知道哪一章最该重写。
+ * 为了抵消位置偏好，奇数号分身会把 B 放在前面。
+ */
+export interface PairResult {
+  persona: string;
+  winner: 'a' | 'b' | 'tie';
+  why: string;
+}
+
+export async function compareOpenings(
+  book: BookHandle,
+  a: { n: number; text: string },
+  b: { n: number; text: string },
+  personaIndex: number,
+): Promise<PairResult> {
+  const p = PERSONAS[personaIndex % PERSONAS.length]!;
+  const swapped = personaIndex % 2 === 1;
+  const first = swapped ? b : a;
+  const second = swapped ? a : b;
+
+  const res = await callLLM({
+    role: 'coldReader',
+    system: `你就是这个人，不是扮演，是就是。
+
+${p.bio}
+
+有人把两本书的开头并排放在你面前。你只有时间读一本。
+你必须选一个，不许说「都不错」。`,
+    user: [
+      `## 甲（第${first.n}章开头）\n\n${first.text}`,
+      `## 乙（第${second.n}章开头）\n\n${second.text}`,
+      '你点开哪个继续读？只输出 JSON：{"pick":"甲" 或 "乙" 或 "都不看","why":"一句话"}',
+    ].join('\n\n---\n\n'),
+    json: true,
+    maxTokens: 600,
+    label: `pair:${a.n}v${b.n}:${p.id}`,
+  });
+
+  const raw = extractJson<{ pick?: string; why?: string }>(res.text);
+  const pick = raw.pick ?? '';
+  let winner: PairResult['winner'] = 'tie';
+  if (pick === '甲') winner = swapped ? 'b' : 'a';
+  else if (pick === '乙') winner = swapped ? 'a' : 'b';
+
+  return { persona: p.name, winner, why: raw.why ?? '' };
+}
+
+export function comparePair(
+  book: BookHandle,
+  a: { n: number; text: string },
+  b: { n: number; text: string },
+): Promise<PairResult[]> {
+  return mapLimit(PERSONAS, PERSONAS.length, (_, i) => compareOpenings(book, a, b, i));
+}
+
 export interface ColdRun {
   ok: ColdReadResult[];
   failed: Array<{ persona: string; error: string }>;
