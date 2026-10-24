@@ -345,6 +345,10 @@ ${styleRules(book)}
     `- 章末最后一句要达成这个意图：${plan.endHook}`,
     `- 这一章绝对不能出现：${plan.mustNot.join('；')}`,
     `- 只写场景表里的事件。不要新增情节、人物、物件——包括结尾不要多写一段。`,
+    `- **新东西第一次出现，必须当场用完整描写引入**（它是什么、在哪、什么样子）。
+      不许用「那根麻绳」「那个结」「那张纸」这种口气指一个前文根本没写过的东西。
+      凡是你想写「那X」的地方，先问自己：读者见过 X 吗？没见过就写全，别用「那」。`,
+    `- 同理，不许让角色随口引用他没听过的信息（谁告诉他的？哪本书上看到的？想清楚再写）。`,
     `- 不允许出现场景表之外的新人物。需要有人在场，就用老周、柳青梧、阿满、玄清这几个已有的。`,
     `- 同一段描写不许出现两次。场景之间必须有明确的时间标记（几点、多久之后、天亮了），不许从「坐到天亮」直接跳到「醒了」。`,
     `- 章末的反转不能和前面已经写出来的事实打架。`,
@@ -475,6 +479,7 @@ async function revise(
   body: string,
   critiques: Critique[],
   cold: ColdReadResult[],
+  arbiterNote = '',
 ): Promise<{ body: string; applied: number; skipped: number; fellBack: boolean }> {
   const actionable = critiques
     .flatMap((c) => c.defects.map((d) => ({ ...d, critic: c.critic })))
@@ -506,6 +511,9 @@ ${styleRules(book)}
   const user = [
     `## 待修订正文`,
     body,
+    arbiterNote
+      ? `## 终审意见（优先级最高，先修这个）\n${arbiterNote}\n这条是终审亲自读出来的硬伤，比下面任何一条都重要。`
+      : '',
     `## 要修的问题（按严重程度排）`,
     actionable
       .map(
@@ -872,6 +880,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
     prevQuality = score;
 
     verdict = gate(critiques, cold, Math.min(profile.minColdVotes, cold.length));
+    let arbiterNote = '';
 
     // 边际情况：读者想继续读、分数不低，只是硬伤条数压线 → 交给仲裁
     if (
@@ -883,6 +892,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
       const a = await arbitrate(book, n, body, critiques, cold);
       log('仲裁', a.publish ? `\x1b[32m放行\x1b[0m：${a.reason}` : `\x1b[33m驳回\x1b[0m：${a.reason}`);
       if (a.publish) verdict = { pass: true, why: `仲裁放行：${a.reason}` };
+      else arbiterNote = a.reason;
     }
     log(
       '审稿',
@@ -895,7 +905,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
     if (round === maxRevisions) break;
 
     revisions++;
-    const r = await revise(book, n, body, critiques, cold);
+    const r = await revise(book, n, body, critiques, cold, arbiterNote);
     body = r.body;
     log(
       '修订',
