@@ -81,7 +81,7 @@
     if (rows.some(row => Number(row.dataset.chapter) === last)) {
       rows.forEach(row => {
         const n = Number(row.dataset.chapter);
-        if (n < last) row.classList.add('read');
+        if (n !== last && (get(`sw:visited:${slug}:${n}`) || get(`sw:pos:${slug}:${n}`) !== null)) row.classList.add('read');
         if (n === last) { row.classList.add('last-read'); row.querySelector('.chapter-label').textContent = '上次读到'; }
       });
       $('[data-reading-note]').textContent = `上次读到第 ${last} 章 · 进度保存在当前浏览器`;
@@ -117,7 +117,7 @@
       window.scrollTo({ top: r * Math.max(1, document.documentElement.scrollHeight - innerHeight), behavior: 'instant' });
     }
     restoring = false;
-    if (!preview) set(`sw:last:${slug}`, chapter);
+    if (!preview) { set(`sw:last:${slug}`, chapter); set(`sw:visited:${slug}:${chapter}`, 1); }
     lastY = window.scrollY;
     update();
   }

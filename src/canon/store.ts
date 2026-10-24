@@ -361,6 +361,36 @@ export interface Trait {
   fromChapter: number;
 }
 
+// ─────────────────────────────────────────────────────────────
+// 物件名录：引擎从正文里长出来的「这本书里已经存在的东西」
+//
+// 写手最高频的硬伤不是句子差，是「需要一个东西，就随手造一个」：
+// 纸背凭空多个「手」字、凭空多一根麻绳、把时辰写成卯时。
+// 给它一张名录，它就知道自己手里有什么。
+// ─────────────────────────────────────────────────────────────
+
+export interface Entity {
+  name: string;
+  kind: '物件' | '地点' | '规矩' | '称谓';
+  note?: string;
+  fromChapter: number;
+}
+
+export function loadEntities(slug: string): Entity[] {
+  const p = resolve(bookDir(slug), 'canon', 'entities.json');
+  return existsSync(p) ? (JSON.parse(read(p)) as Entity[]) : [];
+}
+
+export function saveEntitiesForChapter(slug: string, chapter: number, items: Entity[]): void {
+  const kept = loadEntities(slug).filter((e) => e.fromChapter !== chapter);
+  const seen = new Set(kept.map((e) => e.name));
+  const fresh = items.map((e) => ({ ...e, fromChapter: chapter })).filter((e) => !seen.has(e.name));
+  writeAtomic(
+    resolve(bookDir(slug), 'canon', 'entities.json'),
+    JSON.stringify([...kept, ...fresh], null, 2) + '\n',
+  );
+}
+
 export function loadTraits(slug: string): Trait[] {
   const p = resolve(bookDir(slug), 'canon', 'traits.json');
   return existsSync(p) ? (JSON.parse(read(p)) as Trait[]) : [];

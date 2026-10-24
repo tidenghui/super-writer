@@ -36,6 +36,9 @@ import {
   loadRules,
   saveTraitsForChapter,
   saveAutoRulesForChapter,
+  saveEntitiesForChapter,
+  loadEntities,
+  loadTraits,
   patchChapterMeta,
   listChapterMetas,
   type BookHandle,
@@ -216,6 +219,59 @@ ${bookBriefing(book)}`,
   return { ok: raw.ok === true, issues: raw.issues ?? [] };
 }
 
+/**
+ * 本章相关的那一小撮设定。
+ *
+ * 全量清单给写手是没用的：74 条物件、上百条事实，它读不过来，
+ * 于是照样随手造一个「我姐」「第七层」。
+ * 只给它**这一章会用到**的东西——按场景表里出现的名字去筛。
+ */
+function chapterCanon(book: BookHandle, n: number, plan: ChapterPlan): string {
+  const sceneText = plan.scenes
+    .map((s) => [s.location, s.goal, s.conflict, s.turn, s.exit, s.stake ?? '', ...s.cast].join(' '))
+    .join(' ');
+  const castIds = new Set(plan.scenes.flatMap((s) => s.cast));
+
+  const ents = loadEntities(book.slug)
+    .filter((e) => e.fromChapter < n && sceneText.includes(e.name))
+    .slice(0, 12);
+
+  const traits = loadTraits(book.slug).filter(
+    (t) => t.fromChapter < n && (castIds.has(t.who) || sceneText.includes(t.who)),
+  );
+
+  const rules = loadRules(book.slug)
+    .filter((r) => (r.sinceChapter ?? 0) <= n && (castIds.has(r.who) || r.aliases.some((a) => sceneText.includes(a))))
+    .slice(0, 4);
+
+  const parts: string[] = [];
+  if (ents.length) {
+    parts.push(
+      `## 本章会用到的东西（这些是书里已经存在的，照它们写，不要另造）\n${ents
+        .map((e) => `- ${e.name}（${e.kind}${e.note ? '，' + e.note : ''}）`)
+        .join('\n')}`,
+    );
+  }
+  if (traits.length) {
+    parts.push(
+      `## 本章出场人物的固定特征（写错就是串味）\n${traits.map((t) => `- ${t.who}：${t.trait}`).join('\n')}`,
+    );
+  }
+  if (rules.length) {
+    parts.push(
+      `## 本章的禁忌\n${rules
+        .map(
+          (r) =>
+            `- ${r.who}：${r.why}${r.cannotSay.length ? `（不能说：${r.cannotSay.join('、')}）` : ''}${
+              r.notNear?.length ? `（不能这样写：${r.notNear.join('、')}）` : ''
+            }`,
+        )
+        .join('\n')}`,
+    );
+  }
+  return parts.join('\n\n');
+}
+
 // ─────────────────────────────────────────────────────────────
 // 阶段 2：候选开场（黄金三章的算力偏心就体现在这里）
 // ─────────────────────────────────────────────────────────────
@@ -324,6 +380,7 @@ ${styleRules(book)}
 
   const user = [
     progressBrief(book, n),
+    chapterCanon(book, n, plan),
     // 已写进正文的事实和还没还的债，写手必须看到——
     // 不然它会写出「柳青梧的父亲是杂役」这种和前面矛盾的东西
     factsBrief(book, n),
@@ -692,6 +749,8 @@ interface CanonUpdate {
   newTraits?: Array<{ who: string; trait: string }>;
   /** 本章确立的禁忌：谁不能说/不能怎么写 */
   newRules?: Array<{ who: string; aliases: string[]; cannotSay: string[]; notNear?: string[]; why: string }>;
+  /** 本章出现、以后可以引用的具体东西：物件、地点、规矩、称谓 */
+  newEntities?: Array<{ name: string; kind: '物件' | '地点' | '规矩' | '称谓'; note?: string }>;
 }
 
 async function recordCanon(book: BookHandle, n: number, title: string, body: string): Promise<CanonUpdate> {
@@ -716,9 +775,12 @@ async function recordCanon(book: BookHandle, n: number, title: string, body: str
       `   只记正文里真的写出来的，不推测。who 用角色 id。最多 3 条。`,
       `6. newRules：这一章**明写出来**的禁忌——某人被下了封口令、某人说某类话会出事。`,
       `   没有就留空，不要编。最多 1 条。`,
+      `7. newEntities：这一章出场、以后会被反复引用的**具体东西**——有名有姓的物件、地点、规矩、称谓。`,
+      `   比如「渠册」「自举签」「第七块架签」「申时之前回来」。最多 5 条，只记重要的。`,
+      `   这张表是给后面的章用的：写手需要一个东西时，会先看这里有没有。`,
       '',
       `只输出 JSON：
-{"summary":"...","newFacts":[{"subject":"...","fact":"..."}],"promiseUpdates":[{"id":"p1","paidAt":${n}}],"newPromises":[{"text":"...","dueBy":${n + 5},"importance":2}],"newTraits":[{"who":"liuqingwu","trait":"走路三下一样重"}],"newRules":[{"who":"老周","aliases":["老周"],"cannotSay":["墨池"],"why":"舌上有禁制"}]}`,
+{"summary":"...","newFacts":[{"subject":"...","fact":"..."}],"promiseUpdates":[{"id":"p1","paidAt":${n}}],"newPromises":[{"text":"...","dueBy":${n + 5},"importance":2}],"newEntities":[{"name":"渠册","kind":"物件","note":"老周让他抄的册子"}],"newTraits":[{"who":"liuqingwu","trait":"走路三下一样重"}],"newRules":[{"who":"老周","aliases":["老周"],"cannotSay":["墨池"],"why":"舌上有禁制"}]}`,
     ].join('\n\n---\n\n'),
     json: true,
     maxTokens: 2500,
@@ -733,6 +795,7 @@ async function recordCanon(book: BookHandle, n: number, title: string, body: str
     newPromises: raw.newPromises ?? [],
     newTraits: raw.newTraits ?? [],
     newRules: raw.newRules ?? [],
+    newEntities: raw.newEntities ?? [],
   };
 }
 
@@ -1028,6 +1091,13 @@ export async function finalize(book: BookHandle, result: ChapterResult): Promise
       (update.newTraits ?? []).map((t) => ({ who: t.who, trait: t.trait, fromChapter: n })),
     );
     if ((update.newRules ?? []).length) saveAutoRulesForChapter(book.slug, n, update.newRules ?? []);
+    if ((update.newEntities ?? []).length) {
+      saveEntitiesForChapter(
+        book.slug,
+        n,
+        (update.newEntities ?? []).map((e) => ({ ...e, fromChapter: n })),
+      );
+    }
     saveChapter(book.slug, n, plan.title, body, chapterMeta);
   } else {
     log('归档', 'mock 模式：不写盘（要写盘设 SW_MOCK_SAVE=1）');
@@ -1322,6 +1392,13 @@ export async function recanonChapter(bookSlug: string, n: number): Promise<void>
     (update.newTraits ?? []).map((t) => ({ who: t.who, trait: t.trait, fromChapter: n })),
   );
   if ((update.newRules ?? []).length) saveAutoRulesForChapter(bookSlug, n, update.newRules ?? []);
+  if ((update.newEntities ?? []).length) {
+    saveEntitiesForChapter(
+      bookSlug,
+      n,
+      (update.newEntities ?? []).map((e) => ({ ...e, fromChapter: n })),
+    );
+  }
 
   const promises = dropGeneratedPromises(book.bible.promises, n).map((p) => {
     const upd = update.promiseUpdates.find((u) => u.id === p.id);
