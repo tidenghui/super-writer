@@ -950,7 +950,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
       !verdict.pass &&
       cold.filter((r) => r.willContinue).length >= Math.min(profile.minColdVotes, cold.length) &&
       avgScore(critiques) >= 5.5 &&
-      blockers(critiques).length < 8
+      blockers(critiques).length < 11
     ) {
       const a = await arbitrate(book, n, body, critiques, cold);
       log('仲裁', a.publish ? `\x1b[32m放行\x1b[0m：${a.reason}` : `\x1b[33m驳回\x1b[0m：${a.reason}`);
