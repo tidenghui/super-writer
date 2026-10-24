@@ -431,6 +431,17 @@ export interface BookInfo {
   synopsis?: string;
 }
 
+export function saveBookInfo(slug: string, info: BookInfo): void {
+  writeAtomic(resolve(bookDir(slug), 'book.json'), JSON.stringify(info, null, 2) + '\n');
+}
+
+export function saveCharacters(slug: string, characters: Character[]): void {
+  writeAtomic(
+    resolve(bookDir(slug), 'bible', 'characters.json'),
+    JSON.stringify(characters, null, 2) + '\n',
+  );
+}
+
 export function loadBookInfo(slug: string): BookInfo {
   const p = resolve(bookDir(slug), 'book.json');
   if (!existsSync(p)) return { title: slug };

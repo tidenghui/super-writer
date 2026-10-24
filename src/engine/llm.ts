@@ -1,6 +1,7 @@
 import { resolveRole, type Role } from './config.ts';
 import { isMock, mockCall } from './mock.ts';
 import { logCall, sleep } from './util.ts';
+import { extractJson } from './json.ts';
 
 export interface CallOpts {
   role: Role;
@@ -44,6 +45,27 @@ function budgetCny(): number {
  * 单次模型调用。带重试、成本记账、预算护栏。
  * 所有阶段都必须走这里——否则成本就统计不准了。
  */
+/**
+ * 要 JSON 的调用。
+ *
+ * 模型偶尔会吐出语法坏掉的 JSON（不是被截断，是引号没转义、逗号多了）。
+ * 以前这种情况会直接把整个任务崩掉——一次坏 JSON 白扔一整章的钱。
+ * 现在解析失败就重来，最多三次。
+ */
+export async function callJson<T>(opts: CallOpts & { label: string }): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 1; i <= 3; i++) {
+    const res = await callLLM(opts);
+    try {
+      return extractJson<T>(res.text);
+    } catch (e) {
+      lastErr = e;
+      console.warn(`  \x1b[33m!\x1b[0m ${opts.label} JSON 解析失败（第 ${i} 次），重试`);
+    }
+  }
+  throw new Error(`${opts.label} 连续三次返回无法解析的 JSON：${String(lastErr)}`);
+}
+
 export async function callLLM(opts: CallOpts): Promise<CallResult> {
   if (isMock()) {
     logCall({

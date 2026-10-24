@@ -7,6 +7,7 @@ import { runAllCritics } from './engine/critics.ts';
 import { runColdReaders, firstScreenAll, comparePair } from './engine/coldRead.ts';
 import { isMock } from './engine/mock.ts';
 import { expandOutline } from './engine/outline.ts';
+import { createBook } from './engine/genesis.ts';
 import { readFileSync } from 'node:fs';
 import { enableCallLog } from './engine/util.ts';
 import { callLLM } from './engine/llm.ts';
@@ -168,6 +169,28 @@ async function cmdOutline(): Promise<void> {
   console.log(
     `\n  完成 ${reports.length} 章${bad.length ? `，其中 ${bad.length} 章复核仍有问题` : '，全部复核通过'}\n`,
   );
+}
+
+/** 出题：从一句种子生出整本圣经 */
+async function cmdGenesis(): Promise<void> {
+  const slug = flag('slug');
+  const seed = flag('seed');
+  const ending = flag('ending');
+  if (!slug) throw new Error('缺 --slug');
+  if (!seed) throw new Error('缺 --seed "一句话的种子"');
+  if (!ending) throw new Error('缺 --ending "一句话的结局方向"');
+
+  const dir = resolve(runsDir(slug), `genesis-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  await createBook({
+    slug,
+    seed,
+    ending,
+    chapters: Number(flag('chapters') ?? 14),
+    author: flag('author') ?? '灯下人',
+  });
 }
 
 /** 补缓冲：写到手上有 N 章待发为止 */
@@ -575,6 +598,7 @@ function help(): void {
     npm run recanon -- --n 1                    从定稿正文重算某章的事实与伏笔
     npm run audit   [--book slug]               全书漂移审计
     npm run night   [--book slug]               夜班：审计 + 写下一章（给 crontab 用）
+    npm run genesis -- --slug b2 --seed "一句种子" --ending "一句结局" --chapters 14
     npm run backlog [--ahead 5]                 补缓冲：写到手上有 N 章待发
     npm run outline -- --from 13 --to 20        把梗概扩成章纲（策划自己写）
          --ending "一句话的结局方向"          倒推着铺路，且不许现造规则
@@ -608,6 +632,8 @@ async function main(): Promise<void> {
       return cmdFirstScreen();
     case 'compare':
       return cmdCompare();
+    case 'genesis':
+      return cmdGenesis();
     case 'backlog':
       return cmdBacklog();
     case 'outline':

@@ -26,7 +26,8 @@
     "write": "tsx src/cli.ts write",
     "outline": "tsx src/cli.ts outline",
     "backlog": "tsx src/cli.ts backlog",
-    "test": "node --import tsx --test src/serve/*.test.ts"
+    "test": "node --import tsx --test src/serve/*.test.ts",
+    "genesis": "tsx src/cli.ts genesis"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

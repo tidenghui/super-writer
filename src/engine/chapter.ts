@@ -1,4 +1,4 @@
-import { callLLM, spendSoFar } from './llm.ts';
+import { callLLM, callJson, spendSoFar } from './llm.ts';
 import { extractJson, countChars } from './json.ts';
 import { mapLimit } from './util.ts';
 import { isMock } from './mock.ts';
@@ -10,6 +10,7 @@ import {
   repetitionWarnings,
   redlineViolations,
   quoteViolations,
+  normalizeQuotes,
   proximityViolations,
 } from './lint.ts';
 import {
@@ -301,7 +302,7 @@ ${styleRules(book)}`;
     `只输出 JSON，不要解释：{"openings": ["开场一", "开场二", ...]}`,
   ].join('\n');
 
-  const gen = await callLLM({
+  const { openings } = await callJson<{ openings: string[] }>({
     role: 'opener',
     system,
     user,
@@ -310,8 +311,6 @@ ${styleRules(book)}`;
     label: `openings:${n}`,
     temperatureOverride: 1.2,
   });
-
-  const { openings } = extractJson<{ openings: string[] }>(gen.text);
   if (!openings?.length) throw new Error('开场生成失败');
 
   if (openings.length === 1) return { opening: openings[0]!, why: '只有一个候选' };
@@ -517,6 +516,8 @@ ${styleRules(book)}
   }
 
   const r = applyPatches(body, patches);
+  // 最后一道：引号用代码修，不问模型
+  r.body = normalizeQuotes(r.body);
   const after = all(r.body).length;
   log('体检', `修好 ${violations.length - after} 处，剩 ${after} 处`);
 

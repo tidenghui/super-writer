@@ -153,8 +153,21 @@ ${styleRules(book)}`,
 function missingRequirements(book: BookHandle, n: number, beat: ChapterBeat): string[] {
   const reqs = beat.requires ?? [];
   if (!reqs.length) return [];
+  // 开篇三章本来就是建立世界的地方，它们「第一次出现」的东西是应该的，不是漏洞。
+  if (n <= 3) return [];
+
+  // 整本先排章纲再动笔时，前面的「规划」也算已确立——
+  // 否则第 5 章要求的东西，第 3 章已经规划了，却被判成不存在。
+  const planned = book.bible.outline.chapters
+    .filter((c) => c.n < n)
+    .map((c) => `${c.title} ${c.purpose ?? ''} ${(c.beats ?? []).join(' ')} ${c.hook ?? ''}`);
 
   const corpus = [
+    // 圣经本身也是「写手已经知道的东西」：世界规则、人物、命题。
+    // 不放进来的话，第 1 章提到的任何设定都会被判成「从没出现过」。
+    book.bible.world,
+    book.bible.premise,
+    ...planned,
     ...loadEntities(book.slug).filter((e) => e.fromChapter < n).map((e) => `${e.name} ${e.note ?? ''}`),
     ...loadTraits(book.slug).filter((t) => t.fromChapter < n).map((t) => `${t.who} ${t.trait}`),
     ...loadFacts(book.slug).filter((f) => f.chapter < n).map((f) => `${f.subject} ${f.fact}`),

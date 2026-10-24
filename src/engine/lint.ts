@@ -212,6 +212,48 @@ export function pronounViolations(
 }
 
 /**
+ * 确定性引号修复。
+ *
+ * 模型改不干净这类错：它能发现「多了一个右引号」，但一改就改出新问题。
+ * 引号是纯语法，用栈扫一遍就行，不该问模型。
+ *
+ * 规则：扫描全文，多的右引号删掉；没闭合的左引号在句末补上。
+ */
+export function normalizeQuotes(body: string): string {
+  const pairs: Record<string, string> = { '“': '”', '「': '」' };
+  const closers = new Set(Object.values(pairs));
+
+  return body
+    .split(/(\n{2,})/)
+    .map((block) => {
+      if (/^\n+$/.test(block)) return block;
+
+      const out: string[] = [];
+      const stack: string[] = [];
+
+      for (const ch of block) {
+        if (pairs[ch]) {
+          stack.push(pairs[ch] as string);
+          out.push(ch);
+        } else if (closers.has(ch)) {
+          if (stack.length) {
+            stack.pop();
+            out.push(ch);
+          }
+          // 没有对应的左引号，这个右引号是多余的，直接丢弃
+        } else {
+          out.push(ch);
+        }
+      }
+
+      // 还有没闭合的，在段末补齐
+      while (stack.length) out.push(stack.pop() as string);
+      return out.join('');
+    })
+    .join('');
+}
+
+/**
  * 引号配对。看着很蠢，但这是模型最容易犯、读者最容易卡住的错。
  */
 export function quoteViolations(body: string): Violation[] {
