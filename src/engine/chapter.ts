@@ -39,6 +39,9 @@ import {
   saveAutoRulesForChapter,
   saveEntitiesForChapter,
   loadEntities,
+  loadLedger,
+  saveLedgerForChapter,
+  currentLedger,
   loadTraits,
   patchChapterMeta,
   listChapterMetas,
@@ -258,6 +261,15 @@ function chapterCanon(book: BookHandle, n: number, plan: ChapterPlan): string {
       `## 本章出场人物的固定特征（写错就是串味）\n${traits.map((t) => `- ${t.who}：${t.trait}`).join('\n')}`,
     );
   }
+  const ledger = currentLedger(book.slug, n);
+  if (ledger.length) {
+    parts.push(
+      `## 章末必须对得上的账（读者会算，写错就是硬伤）\n${ledger
+        .map((e) => `- ${e.key}：${e.value}${e.unit ?? ''}（第${e.fromChapter}章末）`)
+        .join('\n')}\n\n这一章里凡是要用这些数的地方，先在纸上算一遍再写。加减要对，别为了制造绝境随手扣数。`,
+    );
+  }
+
   if (rules.length) {
     parts.push(
       `## 本章的禁忌\n${rules
@@ -756,6 +768,8 @@ interface CanonUpdate {
   newRules?: Array<{ who: string; aliases: string[]; cannotSay: string[]; notNear?: string[]; why: string }>;
   /** 本章出现、以后可以引用的具体东西：物件、地点、规矩、称谓 */
   newEntities?: Array<{ name: string; kind: '物件' | '地点' | '规矩' | '称谓'; note?: string }>;
+  /** 本章结束时的数量状态：剩墨、剩天数、人数。后面的章要按这个算。 */
+  ledger?: Array<{ key: string; value: string; unit?: string }>;
 }
 
 async function recordCanon(book: BookHandle, n: number, title: string, body: string): Promise<CanonUpdate> {
@@ -780,12 +794,14 @@ async function recordCanon(book: BookHandle, n: number, title: string, body: str
       `   只记正文里真的写出来的，不推测。who 用角色 id。最多 3 条。`,
       `6. newRules：这一章**明写出来**的禁忌——某人被下了封口令、某人说某类话会出事。`,
       `   没有就留空，不要编。最多 1 条。`,
+      `7a. ledger：这一章**结束时**的数量状态。凡是读者会算的数——剩几份墨、还剩几天、在场几个人——`,
+      `   都要记下来，写成 key（稳定的名字）+ value（章末的值）。不要记过程，只记结果。`,
       `7. newEntities：这一章出场、以后会被反复引用的**具体东西**——有名有姓的物件、地点、规矩、称谓。`,
       `   比如「渠册」「自举签」「第七块架签」「申时之前回来」。最多 5 条，只记重要的。`,
       `   这张表是给后面的章用的：写手需要一个东西时，会先看这里有没有。`,
       '',
       `只输出 JSON：
-{"summary":"...","newFacts":[{"subject":"...","fact":"..."}],"promiseUpdates":[{"id":"p1","paidAt":${n}}],"newPromises":[{"text":"...","dueBy":${n + 5},"importance":2}],"newEntities":[{"name":"渠册","kind":"物件","note":"老周让他抄的册子"}],"newTraits":[{"who":"liuqingwu","trait":"走路三下一样重"}],"newRules":[{"who":"老周","aliases":["老周"],"cannotSay":["墨池"],"why":"舌上有禁制"}]}`,
+{"summary":"...","newFacts":[{"subject":"...","fact":"..."}],"promiseUpdates":[{"id":"p1","paidAt":${n}}],"newPromises":[{"text":"...","dueBy":${n + 5},"importance":2}],"ledger":[{"key":"剩墨","value":"2.5","unit":"份"}],"newEntities":[{"name":"渠册","kind":"物件","note":"老周让他抄的册子"}],"newTraits":[{"who":"liuqingwu","trait":"走路三下一样重"}],"newRules":[{"who":"老周","aliases":["老周"],"cannotSay":["墨池"],"why":"舌上有禁制"}]}`,
     ].join('\n\n---\n\n'),
     json: true,
     maxTokens: 2500,
@@ -801,6 +817,7 @@ async function recordCanon(book: BookHandle, n: number, title: string, body: str
     newTraits: raw.newTraits ?? [],
     newRules: raw.newRules ?? [],
     newEntities: raw.newEntities ?? [],
+    ledger: raw.ledger ?? [],
   };
 }
 
@@ -1103,6 +1120,13 @@ export async function finalize(book: BookHandle, result: ChapterResult): Promise
         (update.newEntities ?? []).map((e) => ({ ...e, fromChapter: n })),
       );
     }
+    if ((update.ledger ?? []).length) {
+      saveLedgerForChapter(
+        book.slug,
+        n,
+        (update.ledger ?? []).map((e) => ({ ...e, fromChapter: n })),
+      );
+    }
     saveChapter(book.slug, n, plan.title, body, chapterMeta);
   } else {
     log('归档', 'mock 模式：不写盘（要写盘设 SW_MOCK_SAVE=1）');
@@ -1402,6 +1426,13 @@ export async function recanonChapter(bookSlug: string, n: number): Promise<void>
       bookSlug,
       n,
       (update.newEntities ?? []).map((e) => ({ ...e, fromChapter: n })),
+    );
+  }
+  if ((update.ledger ?? []).length) {
+    saveLedgerForChapter(
+      bookSlug,
+      n,
+      (update.ledger ?? []).map((e) => ({ ...e, fromChapter: n })),
     );
   }
 

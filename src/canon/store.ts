@@ -397,6 +397,46 @@ export function saveEntitiesForChapter(slug: string, chapter: number, items: Ent
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// 数字账本：还剩几份墨、离死期几天、几个人
+//
+// 第10章五次没过，全栽在同一个地方：三份墨开一份用一半，剩的该是两份半，
+// 正文写成一份半；倒计时六天→三天→四天，越写越乱。
+// 这类错完全由代码能管，不该让批评家去发现。
+// ─────────────────────────────────────────────────────────────
+
+export interface LedgerEntry {
+  /** 这个数是什么：剩墨 / 剩天数 / 在场人数 */
+  key: string;
+  /** 本章结束时的值 */
+  value: string;
+  unit?: string;
+  fromChapter: number;
+}
+
+export function loadLedger(slug: string): LedgerEntry[] {
+  const p = resolve(bookDir(slug), 'canon', 'ledger.json');
+  return existsSync(p) ? (JSON.parse(read(p)) as LedgerEntry[]) : [];
+}
+
+export function saveLedgerForChapter(slug: string, chapter: number, items: LedgerEntry[]): void {
+  const kept = loadLedger(slug).filter((e) => e.fromChapter !== chapter);
+  writeAtomic(
+    resolve(bookDir(slug), 'canon', 'ledger.json'),
+    JSON.stringify([...kept, ...items.map((e) => ({ ...e, fromChapter: chapter }))], null, 2) + '\n',
+  );
+}
+
+/** 每个 key 取最新一版 */
+export function currentLedger(slug: string, beforeChapter: number): LedgerEntry[] {
+  const byKey = new Map<string, LedgerEntry>();
+  for (const e of loadLedger(slug).filter((x) => x.fromChapter < beforeChapter)) {
+    const prev = byKey.get(e.key);
+    if (!prev || prev.fromChapter < e.fromChapter) byKey.set(e.key, e);
+  }
+  return [...byKey.values()];
+}
+
 export function loadTraits(slug: string): Trait[] {
   const p = resolve(bookDir(slug), 'canon', 'traits.json');
   return existsSync(p) ? (JSON.parse(read(p)) as Trait[]) : [];
