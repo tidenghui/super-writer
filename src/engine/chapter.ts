@@ -303,6 +303,10 @@ ${styleRules(book)}
 
   const user = [
     progressBrief(book, n),
+    // 已写进正文的事实和还没还的债，写手必须看到——
+    // 不然它会写出「柳青梧的父亲是杂役」这种和前面矛盾的东西
+    factsBrief(book, n),
+    promiseBrief(book, n),
     recentEndings(book, n),
     `## 本章场景表（按顺序写，不要跳；括号里是这个场景的字数配额，必须写够）`,
     plan.scenes
