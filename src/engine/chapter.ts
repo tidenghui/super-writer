@@ -3,7 +3,14 @@ import { extractJson, countChars } from './json.ts';
 import { mapLimit } from './util.ts';
 import { isMock } from './mock.ts';
 import { applyPatches, type Patch } from './patch.ts';
-import { lintProse, formatViolations, chapterShape, repetitionWarnings, redlineViolations, quoteViolations } from './lint.ts';
+import {
+  lintProse,
+  formatViolations,
+  chapterShape,
+  repetitionWarnings,
+  redlineViolations,
+  quoteViolations,
+} from './lint.ts';
 import {
   bookBriefing,
   beatFor,
@@ -25,6 +32,7 @@ import {
   loadChapter,
   saveChapter,
   savePromises,
+  loadRules,
   patchChapterMeta,
   listChapterMetas,
   type BookHandle,
@@ -384,7 +392,15 @@ async function cleanDraft(
   n: number,
   body: string,
 ): Promise<{ body: string; before: number; fixed: number }> {
-  const violations = [...lintProse(body), ...redlineViolations(body), ...quoteViolations(body)];
+  const rules = loadRules(book.slug);
+  const all = (b: string) => [
+    ...lintProse(b),
+    ...redlineViolations(b, rules, n),
+    ...quoteViolations(b),
+    // 人称检查的误报率过高（实测 4/4 误报），不参与自动修订，
+    // 改为在人物卡里写清性别、由「角色一致性」批评家把关。
+  ];
+  const violations = all(body);
   if (violations.length === 0) return { body, before: 0, fixed: 0 };
 
   log('体检', `命中 ${violations.length} 处（禁用词/失声/长句/情绪直陈），定点清洗…`);
@@ -424,7 +440,7 @@ ${styleRules(book)}
   }
 
   const r = applyPatches(body, patches);
-  const after = lintProse(r.body).length + redlineViolations(r.body).length + quoteViolations(r.body).length;
+  const after = all(r.body).length;
   log('体检', `修好 ${violations.length - after} 处，剩 ${after} 处`);
 
   return { body: r.body, before: violations.length, fixed: violations.length - after };

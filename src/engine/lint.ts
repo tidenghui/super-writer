@@ -9,7 +9,7 @@
  */
 
 export interface Violation {
-  kind: '禁用词' | '失声' | '长句' | '情绪直陈' | '越界' | '引号';
+  kind: '禁用词' | '失声' | '长句' | '情绪直陈' | '越界' | '引号' | '人称';
   /** 命中的词或规则说明 */
   rule: string;
   /** 原文里出问题的句子 */
@@ -122,54 +122,23 @@ export function lintProse(body: string): Violation[] {
  * 所以放在这里，机械拦截。
  */
 interface SpeakerRule {
-  name: string;
+  who: string;
   aliases: string[];
-  banned: string[];
+  cannotSay: string[];
   why: string;
+  sinceChapter?: number;
 }
 
-const SPEAKER_RULES: SpeakerRule[] = [
-  {
-    name: '老周',
-    aliases: ['老周', '周无咎'],
-    banned: ['墨池', '献祭', '入池', '写成书', '抄成', '换一人', '书里', '最后一页', '第七行', '后山潭'],
-    why: '舌上有禁制，说不出墨池真相的直白陈述',
-  },
-  {
-    name: '柳青梧',
-    aliases: ['柳青梧'],
-    banned: ['墨池', '献祭', '入池', '换一人', '写成书', '抄成书'],
-    why: '执法堂只查刑律，不知墨池真相',
-  },
-  {
-    name: '玄清',
-    aliases: ['玄清'],
-    banned: ['自己走进', '换一人', '池底', '水底', '抄的是人'],
-    why: '知道一切但不主动交底',
-  },
-];
-
-/**
- * 判断这句话是谁说的。
- *
- * 只认两种可靠形式：
- *   1. 名字 + 说话动词（老周说 / 玄清道 / 柳青梧问）
- *   2. 名字 + 冒号，紧贴引号（老周：“……”）
- *
- * 早先的做法是「附近有名字就算他说」，结果把沈砚的话算到老周头上——
- * 误报比漏报更糟：它会让修订去改一句本来没问题的话。
- */
+/** 说话人归属：只认「名字 + 说话动词」或「名字 + 冒号」两种可靠形式 */
 const SPEECH_VERB = /(说|道|问|答|喊|叫|开口|低声|笑道|吼道)/;
 
-function attributeQuote(text: string, start: number, end: number): SpeakerRule | null {
+function attributeQuote(text: string, start: number, end: number, rules: SpeakerRule[]): SpeakerRule | null {
   const before = text.slice(Math.max(0, start - 30), start);
 
-  for (const rule of SPEAKER_RULES) {
+  for (const rule of rules) {
     for (const alias of rule.aliases) {
-      // 形式二：名字 + 冒号紧贴引号
       if (new RegExp(`${alias}\\s*[:：]\\s*$`).test(before)) return rule;
 
-      // 形式一：名字后面 8 字内有说话动词
       const idx = before.lastIndexOf(alias);
       if (idx >= 0) {
         const tail = before.slice(idx + alias.length);
@@ -182,10 +151,67 @@ function attributeQuote(text: string, start: number, end: number): SpeakerRule |
 }
 
 /**
- * 引号配对。
+ * 角色红线。
  *
- * 看着很蠢，但这是模型最容易犯、读者最容易卡住的错：
- * 多一个右引号，手机上就会读成"对话断了又接上"。
+ * 规则来自 bible/rules.json，不写死在代码里——
+ * 否则「第13章新立的规矩，第14章就失效」。归档时可以往表里追加。
+ */
+export function redlineViolations(body: string, rules: SpeakerRule[], atChapter = Infinity): Violation[] {
+  const out: Violation[] = [];
+  const active = rules.filter((r) => (r.sinceChapter ?? 0) <= atChapter);
+  const quoteRe = /[“「]([^”」]{1,120})[”」]/g;
+
+  let m: RegExpExecArray | null;
+  while ((m = quoteRe.exec(body)) !== null) {
+    const utterance = m[1] ?? '';
+    const who = attributeQuote(body, m.index, m.index + m[0].length, active);
+    if (!who) continue;
+
+    const hit = who.cannotSay.find((w) => utterance.includes(w));
+    if (hit) {
+      out.push({
+        kind: '越界',
+        rule: `${who.who}${who.why}，但这句里出现了「${hit}」`,
+        sentence: m[0],
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * 人称一致性。
+ *
+ * 只看「这一段里只有一个角色」的情况——出现多个角色时，「他」指谁有歧义，容易误伤。
+ * 误报比漏报更糟：它会逼修订去改一句本来没问题的句子。
+ */
+export function pronounViolations(
+  body: string,
+  cast: Array<{ name: string; gender?: string }>,
+): Violation[] {
+  const out: Violation[] = [];
+  for (const para of body.split(/\n{2,}/)) {
+    const text = para.trim();
+    if (!text) continue;
+
+    const present = cast.filter((c) => c.gender && text.includes(c.name));
+    if (present.length !== 1) continue;
+
+    const c = present[0]!;
+    const wrong = c.gender === 'female' ? /(^|[^其])他(?![们日])/ : /她/;
+    if (wrong.test(text)) {
+      out.push({
+        kind: '人称',
+        rule: `${c.name}是${c.gender === 'female' ? '女性' : '男性'}，这一段却用了「${c.gender === 'female' ? '他' : '她'}」`,
+        sentence: text.slice(0, 80),
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * 引号配对。看着很蠢，但这是模型最容易犯、读者最容易卡住的错。
  */
 export function quoteViolations(body: string): Violation[] {
   const out: Violation[] = [];
@@ -195,35 +221,7 @@ export function quoteViolations(body: string): Violation[] {
     const left = (text.match(/[“「]/g) ?? []).length;
     const right = (text.match(/[”」]/g) ?? []).length;
     if (left !== right) {
-      out.push({
-        kind: '引号',
-        rule: `左引号 ${left} 个、右引号 ${right} 个，不配对`,
-        sentence: text.slice(0, 80),
-      });
-    }
-  }
-  return out;
-}
-
-export function redlineViolations(body: string): Violation[] {
-  const out: Violation[] = [];
-  const quoteRe = /[“「]([^”」]{1,120})[”」]/g;
-
-  let m: RegExpExecArray | null;
-  while ((m = quoteRe.exec(body)) !== null) {
-    const utterance = m[1] ?? '';
-    const start = m.index;
-    const end = m.index + m[0].length;
-    const who = attributeQuote(body, start, end);
-    if (!who) continue;
-
-    const hit = who.banned.find((w) => utterance.includes(w));
-    if (hit) {
-      out.push({
-        kind: '越界',
-        rule: `${who.name}${who.why}，但这句里出现了「${hit}」`,
-        sentence: m[0],
-      });
+      out.push({ kind: '引号', rule: `左引号 ${left} 个、右引号 ${right} 个，不配对`, sentence: text.slice(0, 80) });
     }
   }
   return out;

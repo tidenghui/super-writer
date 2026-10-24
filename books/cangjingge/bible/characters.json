@@ -11,7 +11,8 @@
     "secret": "三年前入宗那天的事，他记不清。他以为自己只是忘了。他出生那天，父亲进了后山——他从没见过父亲，只见过父亲抄的书。",
     "arc": "从“抄书的人”变成“被写的人”，最后选择成为“那本书”——把名字写进最后一页。",
     "status": "alive",
-    "firstChapter": 1
+    "firstChapter": 1,
+    "gender": "male"
   },
   {
     "id": "shenhe",
@@ -25,7 +26,8 @@
     "secret": "他不是被强行送进去的。他自己走进去的，为了换一件事。",
     "arc": "从“失踪的父亲”变成“一本书”，最后被儿子替他写完。",
     "status": "transformed",
-    "firstChapter": 1
+    "firstChapter": 1,
+    "gender": "male"
   },
   {
     "id": "laozhou",
@@ -39,7 +41,8 @@
     "secret": "十七年前那一夜，他是抬人的四个杂役之一。他看见的东西让他自己弄瞎了左眼——不是别人弄的。宗门在他舌头上下了禁制：凡涉及墨池真相的直白陈述，他发不出声。",
     "arc": "从“守规矩的老头”变成“用抄书的方式把真相拆成零件递给沈砚的人”。",
     "status": "alive",
-    "firstChapter": 2
+    "firstChapter": 2,
+    "gender": "male"
   },
   {
     "id": "liuqingwu",
@@ -53,7 +56,8 @@
     "secret": "她父亲是上一任执法堂主，因为一桩旧案被贬。那桩旧案，和这次的献祭有关。",
     "arc": "从“查沈砚的人”变成“替沈砚挡在门口的人”。",
     "status": "alive",
-    "firstChapter": 6
+    "firstChapter": 6,
+    "gender": "female"
   },
   {
     "id": "xuanqing",
@@ -67,7 +71,8 @@
     "secret": "他年轻时也是藏经阁的杂役。他翻到过最后一页，而且活了下来——代价是另一个人替他进去了。",
     "arc": "从“讲道理的长辈”变成“把道理讲到底的人”，最后一个字都反驳不了他，但仍然必须打倒他。",
     "status": "alive",
-    "firstChapter": 10
+    "firstChapter": 10,
+    "gender": "male"
   },
   {
     "id": "aman",
@@ -81,6 +86,7 @@
     "secret": "他也在抄书。他抄的那本，是沈砚父亲留下的抄本。",
     "arc": "情感锚点。第 12 章失踪，第 22 章在书里出现。",
     "status": "alive",
-    "firstChapter": 5
+    "firstChapter": 5,
+    "gender": "male"
   }
 ]

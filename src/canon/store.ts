@@ -28,6 +28,8 @@ export interface Character {
   secret?: string;
   arc: string;
   status: 'alive' | 'dead' | 'missing' | 'transformed';
+  /** 性别。写手据此选「他 / 她」，批评家据此查人称。 */
+  gender?: 'male' | 'female';
   firstChapter: number;
 }
 
@@ -298,6 +300,33 @@ export function summaryIndex(metas: ChapterMeta[], upTo: number): string {
     .filter((m) => m.n < upTo && m.summary)
     .map((m) => `第${m.n}章《${m.title}》：${m.summary}`)
     .join('\n');
+}
+
+// ─────────────────────────────────────────────────────────────
+// 硬规则：谁说不出什么话
+//
+// 以前写死在 lint.ts 里，结果是「第13章新立的规矩，第14章就失效」。
+// 现在放在圣经里，归档时可以往里追加。
+// ─────────────────────────────────────────────────────────────
+
+export interface HardRule {
+  who: string;
+  aliases: string[];
+  /** 这个词一旦出现在他的话里，就是越界 */
+  cannotSay: string[];
+  why: string;
+  /** 从第几章开始生效 */
+  sinceChapter?: number;
+}
+
+export function loadRules(slug: string): HardRule[] {
+  const p = resolve(bookDir(slug), 'bible', 'rules.json');
+  if (!existsSync(p)) return [];
+  return JSON.parse(read(p)) as HardRule[];
+}
+
+export function saveRules(slug: string, rules: HardRule[]): void {
+  writeAtomic(resolve(bookDir(slug), 'bible', 'rules.json'), JSON.stringify(rules, null, 2) + '\n');
 }
 
 // ─────────────────────────────────────────────────────────────

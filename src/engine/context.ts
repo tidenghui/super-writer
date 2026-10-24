@@ -63,7 +63,7 @@ export function castSheet(book: BookHandle, ids: string[]): string {
   return picked
     .map((c) =>
       [
-        `### ${c.name}（${c.id}，${c.role === 'protagonist' ? '主角' : c.role === 'antagonist' ? '反派' : '配角'}）`,
+        `### ${c.name}（${c.id}，${c.role === 'protagonist' ? '主角' : c.role === 'antagonist' ? '反派' : '配角'}，${c.gender === 'female' ? '女' : '男'}）`,
         `- 说话方式：${c.voice}`,
         `- 想要：${c.wants}`,
         `- 怕：${c.fears}`,
