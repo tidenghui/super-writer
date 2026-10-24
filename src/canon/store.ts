@@ -30,6 +30,8 @@ export interface Character {
   status: 'alive' | 'dead' | 'missing' | 'transformed';
   /** 性别。写手据此选「他 / 她」，批评家据此查人称。 */
   gender?: 'male' | 'female';
+  /** 签名特征：步态、口癖、习惯动作。写手必须照此描写，检查器按此拦截。 */
+  signature?: string[];
   firstChapter: number;
 }
 
@@ -314,6 +316,8 @@ export interface HardRule {
   aliases: string[];
   /** 这个词一旦出现在他的话里，就是越界 */
   cannotSay: string[];
+  /** 这些短语不能出现在他出现的同一段里（比如把别人的步态安到他身上） */
+  notNear?: string[];
   why: string;
   /** 从第几章开始生效 */
   sinceChapter?: number;

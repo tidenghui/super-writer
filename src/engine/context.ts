@@ -69,6 +69,7 @@ export function castSheet(book: BookHandle, ids: string[]): string {
         `- 怕：${c.fears}`,
         c.secret ? `- 秘密（读者此时未必知道，但你必须守住一致性）：${c.secret}` : '',
         `- 外形：${c.appearance}`,
+        c.signature?.length ? `- 签名特征（必须照此写，写错就是串味）：${c.signature.join('；')}` : '',
       ]
         .filter(Boolean)
         .join('\n'),

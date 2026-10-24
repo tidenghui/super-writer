@@ -9,7 +9,7 @@
  */
 
 export interface Violation {
-  kind: '禁用词' | '失声' | '长句' | '情绪直陈' | '越界' | '引号' | '人称';
+  kind: '禁用词' | '失声' | '长句' | '情绪直陈' | '越界' | '引号' | '人称' | '串味';
   /** 命中的词或规则说明 */
   rule: string;
   /** 原文里出问题的句子 */
@@ -125,6 +125,7 @@ interface SpeakerRule {
   who: string;
   aliases: string[];
   cannotSay: string[];
+  notNear?: string[];
   why: string;
   sinceChapter?: number;
 }
@@ -222,6 +223,35 @@ export function quoteViolations(body: string): Violation[] {
     const right = (text.match(/[”」]/g) ?? []).length;
     if (left !== right) {
       out.push({ kind: '引号', rule: `左引号 ${left} 个、右引号 ${right} 个，不配对`, sentence: text.slice(0, 80) });
+    }
+  }
+  return out;
+}
+
+/**
+ * 邻近禁忌：某个短语不能和某个角色出现在同一段里。
+ *
+ * 典型场景：把老周的步态（两短一长）安到柳青梧身上。
+ * 这类错写手会犯，因为它读章纲时不会去比对「谁走路什么样」。
+ */
+export function proximityViolations(text: string, rules: SpeakerRule[], atChapter = Infinity): Violation[] {
+  const out: Violation[] = [];
+  const active = rules.filter((r) => (r.notNear?.length ?? 0) > 0 && (r.sinceChapter ?? 0) <= atChapter);
+
+  for (const para of text.split(/\n{2,}/)) {
+    const p = para.trim();
+    if (!p) continue;
+    for (const rule of active) {
+      if (!rule.aliases.some((a) => p.includes(a))) continue;
+      for (const phrase of rule.notNear ?? []) {
+        if (p.includes(phrase)) {
+          out.push({
+            kind: '串味',
+            rule: `${rule.who}${rule.why}，但这一段里出现了「${phrase}」`,
+            sentence: p.slice(0, 80),
+          });
+        }
+      }
     }
   }
   return out;

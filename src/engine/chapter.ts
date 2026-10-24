@@ -10,6 +10,7 @@ import {
   repetitionWarnings,
   redlineViolations,
   quoteViolations,
+  proximityViolations,
 } from './lint.ts';
 import {
   bookBriefing,
@@ -610,6 +611,55 @@ function qualityScore(critiques: Critique[], cold: ColdReadResult[]): number {
   return votes * 100 - blockers(critiques).length * 50 - majors(critiques).length * 5 + avgScore(critiques);
 }
 
+/**
+ * 终审仲裁。
+ *
+ * 便宜的流水线经常卡在「读者都说想继续读，但批评家列了五处硬伤」。
+ * 这时候让最贵的模型来判：这些硬伤会不会让人出戏？
+ * 只在边际情况下调用，不参与常规流程。
+ */
+async function arbitrate(
+  book: BookHandle,
+  n: number,
+  body: string,
+  critiques: Critique[],
+  cold: ColdReadResult[],
+): Promise<{ publish: boolean; reason: string }> {
+  const hard = blockers(critiques).slice(0, 6);
+  const votes = cold.filter((r) => r.willContinue).length;
+
+  const res = await callLLM({
+    role: 'arbiter',
+    system: `你是这本书的终审。你只回答一件事：这一章现在能不能发。
+
+判断标准不是「有没有毛病」——任何一章都有毛病。标准是：
+**这些毛病会不会让目标读者出戏、弃书、或者觉得作者在糊弄他。**
+
+如果只是「可以更好」，可以发。如果是「读者会当场觉得不对」，不能发。`,
+    user: [
+      `## 读者反应`,
+      `${votes}/${cold.length} 个读者说会继续读。`,
+      cold.map((r) => `- ${r.persona}：${r.verdict}`).join('\n'),
+      `## 批评家指出的硬伤`,
+      hard.length
+        ? hard
+            .map((d, i) => `${i + 1}. 「${d.quote.slice(0, 40)}」\n   ${d.problem.slice(0, 120)}`)
+            .join('\n\n')
+        : '（无）',
+      `## 正文`,
+      body,
+      `## 输出`,
+      `只输出 JSON：{"publish": true/false, "reason": "一句话"}`,
+    ].join('\n\n---\n\n'),
+    json: true,
+    maxTokens: 3000,
+    label: `arbiter:${n}`,
+  });
+
+  const raw = extractJson<{ publish?: boolean; reason?: string }>(res.text);
+  return { publish: raw.publish === true, reason: raw.reason ?? '' };
+}
+
 // ─────────────────────────────────────────────────────────────
 // 阶段 6：把这一章沉淀回圣经
 // ─────────────────────────────────────────────────────────────
@@ -801,6 +851,18 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
     prevQuality = score;
 
     verdict = gate(critiques, cold, Math.min(profile.minColdVotes, cold.length));
+
+    // 边际情况：读者想继续读、分数不低，只是硬伤条数压线 → 交给仲裁
+    if (
+      !verdict.pass &&
+      cold.filter((r) => r.willContinue).length >= Math.min(profile.minColdVotes, cold.length) &&
+      avgScore(critiques) >= 5.5 &&
+      blockers(critiques).length < 8
+    ) {
+      const a = await arbitrate(book, n, body, critiques, cold);
+      log('仲裁', a.publish ? `\x1b[32m放行\x1b[0m：${a.reason}` : `\x1b[33m驳回\x1b[0m：${a.reason}`);
+      if (a.publish) verdict = { pass: true, why: `仲裁放行：${a.reason}` };
+    }
     log(
       '审稿',
       critiques.map((c) => `${c.critic} ${c.score}`).join('｜') +

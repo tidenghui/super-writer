@@ -14,7 +14,8 @@
  */
 import { callLLM } from './llm.ts';
 import { extractJson } from './json.ts';
-import { saveOutline } from '../canon/store.ts';
+import { saveOutline, loadRules } from '../canon/store.ts';
+import { proximityViolations } from './lint.ts';
 import {
   bookBriefing,
   bookTitle,
@@ -110,8 +111,12 @@ ${styleRules(book)}`,
       fixes.length ? `## 上一版被打回的原因（必须修掉）\n${fixes.map((f, i) => `${i + 1}. ${f}`).join('\n')}` : '',
       `## 你要产出什么`,
       `把这一章扩成可以直接开写的章纲：`,
-      `- beats：5–6 条。每一条都是一个**场景级事件**（谁、在哪、想要什么、被什么挡住、结果如何），不是「他去查看账册」这种概述。`,
-      `- 每条节拍里如果出现「发现 / 得知 / 拿到」之类的信息推进，必须写清信息**从哪来**（看到的、别人说的、算出来的）。凭空知道是硬伤。`,
+      `- beats：5–6 条。每一条都是一个**场景级事件**：谁、在哪、想要什么、被什么挡住、结果如何。`,
+      `- **每条不超过 70 字。**这个限制是故意的：`,
+      `  颜色、气味、具体手势、数字、比喻——一概不要写进章纲。那些细节交给起草，
+     因为它手上有事实表可以核对，而你没有。你写得越细，写错的地方就越多，正文会忠实照抄。`,
+      `- 每条节拍里如果出现「发现 / 得知 / 拿到」之类的信息推进，必须写清信息**从哪来**（看到的、别人说的、算出来的）。凭空知道是硬伤。
+- 你只规定**事件和因果**，不规定**感官细节**。`,
       `- cast：本章出场角色的 id，只能从上面的名单里选。`,
       `- 本章是**第 ${day} 天**，距入池还有 **${14 - day} 天**。这个数字已经定了，不要改，也不要在 beats 里写错。`,
       `- plant / pay：埋哪条债、还哪条债，用债的 id。`,
@@ -181,6 +186,7 @@ export async function expandOutline(
 ): Promise<OutlineReport[]> {
   const reports: OutlineReport[] = [];
   const outline = structuredClone(book.bible.outline);
+  const rules = loadRules(book.slug);
 
   for (let n = from; n <= to; n++) {
     const ch = loadChapter(book.slug, n);
@@ -196,10 +202,19 @@ export async function expandOutline(
     const day = Math.min(14, prevDay + 1);
 
     let fixes: string[] = [];
+    // 章纲也要跑和正文一样的机械检查：
+    // 上一版把「两短一长」写进了柳青梧的节拍，正文忠实照抄，一路带进稿子。
+    const mechanical = (b: ChapterBeat) =>
+      proximityViolations((b.beats ?? []).join('\n\n'), rules, n).map((v) => v.rule);
+
     let beat = await draftBeat(book, n, day, fixes);
     beat.n = n;
     beat.day = day;
-    let review = await reviewBeat(book, n, beat);
+    const mech1 = mechanical(beat);
+    let review = mech1.length
+      ? { ok: false, issues: mech1 }
+      : await reviewBeat(book, n, beat);
+    if (mech1.length) console.log(`  第 ${n} 章：机械检查拦下 — ${mech1[0]}`);
 
     for (let round = 2; round <= MAX_ROUNDS && !review.ok; round++) {
       console.log(`  第 ${n} 章：主编打回（第 ${round - 1} 轮）— ${review.issues[0] ?? ''}`);
@@ -207,7 +222,8 @@ export async function expandOutline(
       beat = await draftBeat(book, n, day, fixes);
       beat.n = n;
       beat.day = day;
-      review = await reviewBeat(book, n, beat);
+      const mechN = mechanical(beat);
+      review = mechN.length ? { ok: false, issues: mechN } : await reviewBeat(book, n, beat);
     }
 
     const idx = outline.chapters.findIndex((c) => c.n === n);

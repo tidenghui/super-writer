@@ -140,9 +140,10 @@ export async function callLLM(opts: CallOpts): Promise<CallResult> {
       const finish = choice?.finish_reason ?? '?';
       const reasoningLen = (choice?.message?.reasoning_content ?? '').length;
 
-      if (!text) {
-        // 推理模型会把 token 先花在思考上。切断了就会 content 为空、finish_reason=length。
-        // 这种情况必须记日志，否则线上就是一封「模型返回了空内容」，什么都查不到。
+      // 截断必须重试——不管有没有内容。
+      // 推理模型经常把预算烧在思考上，只吐出半截 JSON。以前只在「内容为空」时重试，
+      // 结果半截 JSON 会一路走到解析层才炸，看不出原因。
+      if (finish === 'length' && attempt < 3) {
         logCall({
           ts: new Date().toISOString(),
           label,
@@ -153,19 +154,30 @@ export async function callLLM(opts: CallOpts): Promise<CallResult> {
           maxTokens,
           reasoningLen,
           usage: data.usage ?? null,
-          user: opts.user.slice(0, 2000),
+          partialChars: text.length,
         });
+        maxTokens = Math.min(maxTokens * 2, 32000);
+        (body as Record<string, number>)[tokenField] = maxTokens;
+        console.warn(
+          `  \x1b[33m!\x1b[0m ${label} 被 max_tokens=${maxTokens / 2} 截断（推理 ${reasoningLen} 字，只出 ${text.length} 字），翻倍重试`,
+        );
+        continue;
+      }
 
-        if (finish === 'length' && attempt < 3) {
-          maxTokens = Math.min(maxTokens * 2, 32000);
-          (body as Record<string, number>)[tokenField] = maxTokens;
-          console.warn(
-            `  \x1b[33m!\x1b[0m ${label} 被 max_tokens=${maxTokens / 2} 截断（推理占了 ${reasoningLen} 字），翻倍重试`,
-          );
-          continue;
-        }
+      if (!text) {
+        logCall({
+          ts: new Date().toISOString(),
+          label,
+          role: opts.role,
+          model: r.model,
+          failed: true,
+          finish,
+          maxTokens,
+          reasoningLen,
+          usage: data.usage ?? null,
+        });
         throw new Error(
-          `模型返回了空内容（${label}｜finish_reason=${finish}｜max_tokens=${maxTokens}｜推理 ${reasoningLen} 字）`,
+          `模型返回了空内容（${label}｜finish=${finish}｜max_tokens=${maxTokens}｜推理 ${reasoningLen} 字）`,
         );
       }
 

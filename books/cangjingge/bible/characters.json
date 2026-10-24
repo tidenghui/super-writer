@@ -12,7 +12,11 @@
     "arc": "从“抄书的人”变成“被写的人”，最后选择成为“那本书”——把名字写进最后一页。",
     "status": "alive",
     "firstChapter": 1,
-    "gender": "male"
+    "gender": "male",
+    "signature": [
+      "第一人称叙述，不用\"气感\"\"内息\"这类修行行话",
+      "紧张时句子更短"
+    ]
   },
   {
     "id": "shenhe",
@@ -27,7 +31,10 @@
     "arc": "从“失踪的父亲”变成“一本书”，最后被儿子替他写完。",
     "status": "transformed",
     "firstChapter": 1,
-    "gender": "male"
+    "gender": "male",
+    "signature": [
+      "批注每句不超过九个字"
+    ]
   },
   {
     "id": "laozhou",
@@ -42,7 +49,11 @@
     "arc": "从“守规矩的老头”变成“用抄书的方式把真相拆成零件递给沈砚的人”。",
     "status": "alive",
     "firstChapter": 2,
-    "gender": "male"
+    "gender": "male",
+    "signature": [
+      "走路两短一长、右脚落得轻",
+      "说话前先咳，真话说不出口就转成暗示"
+    ]
   },
   {
     "id": "liuqingwu",
@@ -57,7 +68,11 @@
     "arc": "从“查沈砚的人”变成“替沈砚挡在门口的人”。",
     "status": "alive",
     "firstChapter": 6,
-    "gender": "female"
+    "gender": "female",
+    "signature": [
+      "走路三下一样重",
+      "说话带公文腔：按律、依例、我记下了"
+    ]
   },
   {
     "id": "xuanqing",
@@ -72,7 +87,11 @@
     "arc": "从“讲道理的长辈”变成“把道理讲到底的人”，最后一个字都反驳不了他，但仍然必须打倒他。",
     "status": "alive",
     "firstChapter": 10,
-    "gender": "male"
+    "gender": "male",
+    "signature": [
+      "说话极慢，每个字都清楚",
+      "从不威胁，只陈述"
+    ]
   },
   {
     "id": "aman",
@@ -87,6 +106,10 @@
     "arc": "情感锚点。第 12 章失踪，第 22 章在书里出现。",
     "status": "alive",
     "firstChapter": 5,
-    "gender": "male"
+    "gender": "male",
+    "signature": [
+      "句子短，主谓宾常不全",
+      "不识字"
+    ]
   }
 ]
