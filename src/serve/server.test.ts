@@ -2,7 +2,8 @@ import { before, after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { listBooks, listChapterMetas } from '../canon/store.ts';
 import { publishedChapters } from './publication.ts';
 
@@ -69,4 +70,29 @@ test('preview requires authorization and never enters a shared cache', async () 
 test('theme parameters cannot inject HTML attributes', async () => {
   const html = await (await fetch(`${origin}/?theme=${encodeURIComponent('" onload="alert(1)')}`)).text();
   assert.ok(!html.includes('onload="alert(1)'));
+});
+
+test('new HTML bypasses cached unversioned CSS and JS using their content hashes', async () => {
+  const html = await (await fetch(origin)).text();
+  for (const name of ['theme.css', 'reader.js']) {
+    const expected = readFileSync(new URL(`./${name}`, import.meta.url), 'utf8');
+    const hash = createHash('sha256').update(expected).digest('hex').slice(0, 16);
+    const versioned = `/static/${name}?v=${hash}`;
+    assert.ok(html.includes(`"${versioned}"`));
+    assert.ok(!html.includes(`"/static/${name}"`), 'HTML must not reuse the old browser cache key');
+    const res = await fetch(origin + versioned);
+    assert.equal(res.status, 200);
+    assert.equal(await res.text(), expected);
+  }
+});
+
+test('inline lanterns retain a safe size and appearance when CSS is unavailable', async () => {
+  const html = await (await fetch(origin)).text();
+  const icons = html.match(/<svg class="lantern"[^>]*>/g) ?? [];
+  assert.ok(icons.length > 0);
+  for (const svg of icons) {
+    assert.match(svg, /width="27" height="36"/);
+    assert.match(svg, /fill="none"/);
+    assert.match(svg, /stroke="#[0-9a-f]+"/);
+  }
 });

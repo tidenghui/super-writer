@@ -25,6 +25,8 @@ import {
   listChapterMetas,
   loadChapter,
   loadFacts,
+  loadEntities,
+  loadTraits,
   openPromises,
   summaryIndex,
   type BookHandle,
@@ -121,8 +123,12 @@ ${styleRules(book)}`,
       `- 本章是**第 ${day} 天**，距入池还有 **${14 - day} 天**。这个数字已经定了，不要改，也不要在 beats 里写错。`,
       `- plant / pay：埋哪条债、还哪条债，用债的 id。`,
       `- hook：章末最后一句要达到的效果（写意图，不写原句）。`,
+      `- requires：这一章的**情节要成立，依赖哪些书里已经成立的东西**。`,
+      `  用短词组写（物件名、人名、已发生的事），每条不超过 10 个字。最多 5 条。`,
+      `  只写「书里真的已经有了」的。如果某个前提其实还没埋，**就不要写这一章的情节**，换一个能成立的。`,
+      `  这一条是硬约束：引擎会拿它逐条回查，查不到就退回重写。`,
       `只输出 JSON：
-{"n":${n},"title":"...","purpose":"...","beats":["...","..."],"hook":"...","cast":["shenyan"],"plant":[],"pay":[]}`,
+{"n":${n},"title":"...","purpose":"...","beats":["...","..."],"hook":"...","cast":["shenyan"],"requires":["渠册","老周的缺指"],"plant":[],"pay":[]}`,
     ]
       .filter(Boolean)
       .join('\n\n---\n\n'),
@@ -132,6 +138,50 @@ ${styleRules(book)}`,
   });
 
   return extractJson<ChapterBeat>(res.text);
+}
+
+/**
+ * 前置条件回查。
+ *
+ * 第23章卡了五次，根因是高潮依赖三个前 22 章从没出现过的前提。
+ * 这件事在章纲阶段就能查出来——只要有谁去查。
+ */
+function missingRequirements(book: BookHandle, n: number, beat: ChapterBeat): string[] {
+  const reqs = beat.requires ?? [];
+  if (!reqs.length) return [];
+
+  const corpus = [
+    ...loadEntities(book.slug).filter((e) => e.fromChapter < n).map((e) => `${e.name} ${e.note ?? ''}`),
+    ...loadTraits(book.slug).filter((t) => t.fromChapter < n).map((t) => `${t.who} ${t.trait}`),
+    ...loadFacts(book.slug).filter((f) => f.chapter < n).map((f) => `${f.subject} ${f.fact}`),
+    book.bible.promises.map((p) => `${p.text}`),
+    book.bible.characters.map((c) => `${c.name} ${c.id} ${c.role}`),
+  ]
+    .join('\n')
+    .toLowerCase();
+
+  // 「人名/物件名 + 属性」不算缺——玄清声音、阿满按手、沈鹤笔迹，
+  // 人都在，只是这种词组不会原样出现在书里。
+  const known = [
+    ...book.bible.characters.flatMap((c) => [c.name, c.id]),
+    ...loadEntities(book.slug).filter((e) => e.fromChapter < n).map((e) => e.name),
+  ].filter((x) => x.length >= 2);
+
+  return reqs.filter((r) => {
+    const key = r.trim().toLowerCase();
+    if (!key) return false;
+    if (known.some((k) => key.includes(k.toLowerCase()))) return false;
+    if (corpus.includes(key)) return false;
+
+    // 退一步：只要词组里有连续的 3 字片段在书里出现过，就算有这个前提。
+    // 2 字的词要求整词出现——太松的话什么都查不出来。
+    if ([...key].length <= 2) return true;
+    const chars = [...key];
+    for (let i = 0; i + 3 <= chars.length; i++) {
+      if (corpus.includes(chars.slice(i, i + 3).join(''))) return false;
+    }
+    return true;
+  });
 }
 
 /** 主编复核：这份章纲有没有违反已写事实、有没有凭空信息 */
@@ -148,6 +198,10 @@ async function reviewBeat(
 
 1. **与已写事实冲突**——时间线、年岁、物件位置、已经发生过的事被改写。
 2. **出现了名单之外的角色**。
+3. **情节依赖书里还没有的东西**——这是最要命的一种。
+   办法：把这一章的每个关键转折拿出来问「读者凭什么接受这一步？」
+   如果答案需要某个前文从没交代过的物件、关系、回忆、规则，那就是硬伤。
+   高潮章最容易犯：它默认读者已经知道一堆前面没埋的事。
 
 对话层面的事（谁能不能说某句话）不在这里管——那由起草阶段的机械检查拦，
 它比你看得更准，而且不会漏。
@@ -161,8 +215,14 @@ ${bookBriefing(book)}`,
     user: [
       `## 已写进正文的事实\n${establishedFacts(book, n) || '（无）'}`,
       `## 角色名单\n${castRoster(book)}`,
+      `## 书里已经存在的东西（判断「有没有铺垫」的依据）`,
+      [
+        `物件/地点：${loadEntities(book.slug).filter((e) => e.fromChapter < n).map((e) => e.name).join('、')}`,
+        `已写事实：${loadFacts(book.slug).filter((f) => f.chapter < n).slice(-40).map((f) => `${f.subject}：${f.fact}`).join('；')}`,
+      ].join('\n'),
       `## 待审章纲（第 ${n} 章）`,
       `${beat.title}\n${beat.beats.map((b, i) => `${i + 1}. ${b}`).join('\n')}\n钩子：${beat.hook}`,
+      beat.requires?.length ? `本章声称依赖：${beat.requires.join('、')}` : '',
       `## 输出`,
       `只输出 JSON：{"ok": true/false, "issues": ["..."]}。`,
       `没有硬伤就 ok=true、issues 为空。**宁可放过，不要凑数。**`,
@@ -196,7 +256,6 @@ export async function expandOutline(
     }
 
     // 改到过为止。人和模型一样，第一版总会有漏洞；关键是有没有人在盯。
-    const MAX_ROUNDS = 2;
     // 天数由代码推进：上一章 +1，但不越过入池（第 14 天）
     const prevDay = outline.chapters.filter((c) => c.n < n && c.day !== undefined).at(-1)?.day ?? n - 1;
     const day = Math.min(14, prevDay + 1);
@@ -204,8 +263,12 @@ export async function expandOutline(
     let fixes: string[] = [];
     // 章纲也要跑和正文一样的机械检查：
     // 上一版把「两短一长」写进了柳青梧的节拍，正文忠实照抄，一路带进稿子。
-    const mechanical = (b: ChapterBeat) =>
-      proximityViolations((b.beats ?? []).join('\n\n'), rules, n).map((v) => v.rule);
+    const mechanical = (b: ChapterBeat) => [
+      ...proximityViolations((b.beats ?? []).join('\n\n'), rules, n).map((v) => v.rule),
+      ...missingRequirements(book, n, b).map(
+        (r) => `这一章依赖「${r}」，但书里到第 ${n - 1} 章为止从没出现过。要么换成已有的，要么这个情节不成立。`,
+      ),
+    ];
 
     let beat = await draftBeat(book, n, day, fixes);
     beat.n = n;
@@ -215,6 +278,10 @@ export async function expandOutline(
       ? { ok: false, issues: mech1 }
       : await reviewBeat(book, n, beat);
     if (mech1.length) console.log(`  第 ${n} 章：机械检查拦下 — ${mech1[0]}`);
+
+    // 情节依赖不存在的前提，是最难改的一种：往往要重新设计整章走向。
+    // 这种章多给两轮，普通的只给两轮。
+    const MAX_ROUNDS = mech1.some((m) => m.includes('从没出现过')) ? 4 : 2;
 
     for (let round = 2; round <= MAX_ROUNDS && !review.ok; round++) {
       console.log(`  第 ${n} 章：主编打回（第 ${round - 1} 轮）— ${review.issues[0] ?? ''}`);

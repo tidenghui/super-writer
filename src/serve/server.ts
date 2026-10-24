@@ -1,6 +1,6 @@
 /** File-backed, server-rendered reading platform. No build step or external assets. */
 import { createServer } from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,12 @@ import { publishedChapters } from './publication.ts';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CSS = readFileSync(resolve(HERE, 'theme.css'), 'utf8');
 const CLIENT = readFileSync(resolve(HERE, 'reader.js'), 'utf8');
+// Keep URLs in sync with their contents: a cached pre-deployment stylesheet must
+// never be reused by new HTML, even behind Caddy's one-day static cache.
+const assetUrl = (name: string, content: string) =>
+  `/static/${name}?v=${createHash('sha256').update(content).digest('hex').slice(0, 16)}`;
+const CSS_URL = assetUrl('theme.css', CSS);
+const CLIENT_URL = assetUrl('reader.js', CLIENT);
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '127.0.0.1';
 const SITE_URL = (process.env.SITE_URL ?? `http://127.0.0.1:${PORT}`).replace(/\/$/, '');
@@ -31,7 +37,7 @@ function live(slug: string): ChapterMeta[] {
 }
 const date = (iso: string) => new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric' }).format(new Date(iso));
 const words = (n: number) => n >= 10000 ? `${(n / 10000).toFixed(1)} 万字` : `${n.toLocaleString('zh-CN')} 字`;
-const lantern = `<svg class="lantern" viewBox="0 0 32 40" aria-hidden="true"><path d="M12 3h8M16 3v4M10 32h12M16 33v5"/><rect x="6" y="8" width="20" height="23" rx="8"/><path d="M16 9c-7 7-7 14 0 21M16 9c7 7 7 14 0 21M7 19h18"/></svg>`;
+const lantern = `<svg class="lantern" width="27" height="36" fill="none" stroke="#a63e30" stroke-width="1.3" viewBox="0 0 32 40" aria-hidden="true"><path d="M12 3h8M16 3v4M10 32h12M16 33v5"/><rect x="6" y="8" width="20" height="23" rx="8"/><path d="M16 9c-7 7-7 14 0 21M16 9c7 7 7 14 0 21M7 19h18"/></svg>`;
 function header(back?: { href: string; text: string }): string {
   return `<header class="site-header"><div class="header-inner"><a class="brand" href="/" aria-label="${esc(SITE_NAME)}首页">${lantern}<span>${esc(SITE_NAME)}</span></a><nav aria-label="主导航">${back ? `<a href="${back.href}">${esc(back.text)}</a>` : '<a class="nav-current" href="/#library">书库</a>'}<button class="icon-button" data-open="settings" aria-haspopup="dialog" aria-label="打开阅读设置">◐ <span>阅读设置</span></button></nav></div></header>`;
 }
@@ -45,8 +51,8 @@ function settings(): string {
 }
 function layout(title: string, body: string, theme: string | null, slug?: string): string {
   const validTheme = ['light', 'dark', 'sepia'].includes(theme ?? '') ? theme : null;
-  return `<!doctype html><html lang="zh-CN"${validTheme ? ` data-theme="${validTheme}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light dark"><title>${esc(title === SITE_NAME ? title : `${title} · ${SITE_NAME}`)}</title><link rel="stylesheet" href="/static/theme.css"><link rel="alternate" type="application/rss+xml" title="RSS 订阅" href="${slug ? feedUrl(slug) : '/feed.xml'}"><link rel="icon" href="/static/lantern.svg" type="image/svg+xml">
-  <script>(function(){try{var r=document.documentElement,t=localStorage.getItem('sw:theme');if(!r.dataset.theme&&['light','dark','sepia'].includes(t))r.dataset.theme=t;var f=parseInt(localStorage.getItem('sw:fs'));if(f>=16&&f<=28)r.style.setProperty('--fs',f+'px');var l=localStorage.getItem('sw:leading');if(['1.7','1.95','2.25'].includes(l))r.style.setProperty('--leading',l);if(localStorage.getItem('sw:font')==='sans')r.dataset.font='sans';}catch(e){}})();</script><script src="/static/reader.js" defer></script></head><body><a class="skip-link" href="#main">跳到主要内容</a>${body}<footer class="site-footer"><a class="brand" href="/">${lantern}${esc(SITE_NAME)}</a><span>故事在灯下继续。</span><a href="${slug ? feedUrl(slug) : '/feed.xml'}">RSS 订阅 ↗</a></footer>${settings()}</body></html>`;
+  return `<!doctype html><html lang="zh-CN"${validTheme ? ` data-theme="${validTheme}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light dark"><title>${esc(title === SITE_NAME ? title : `${title} · ${SITE_NAME}`)}</title><link rel="stylesheet" href="${CSS_URL}"><link rel="alternate" type="application/rss+xml" title="RSS 订阅" href="${slug ? feedUrl(slug) : '/feed.xml'}"><link rel="icon" href="/static/lantern.svg" type="image/svg+xml">
+  <script>(function(){try{var r=document.documentElement,t=localStorage.getItem('sw:theme');if(!r.dataset.theme&&['light','dark','sepia'].includes(t))r.dataset.theme=t;var f=parseInt(localStorage.getItem('sw:fs'));if(f>=16&&f<=28)r.style.setProperty('--fs',f+'px');var l=localStorage.getItem('sw:leading');if(['1.7','1.95','2.25'].includes(l))r.style.setProperty('--leading',l);if(localStorage.getItem('sw:font')==='sans')r.dataset.font='sans';}catch(e){}})();</script><script src="${CLIENT_URL}" defer></script></head><body><a class="skip-link" href="#main">跳到主要内容</a>${body}<footer class="site-footer"><a class="brand" href="/">${lantern}${esc(SITE_NAME)}</a><span>故事在灯下继续。</span><a href="${slug ? feedUrl(slug) : '/feed.xml'}">RSS 订阅 ↗</a></footer>${settings()}</body></html>`;
 }
 function cover(title: string, author?: string): string {
   return `<div class="cover" aria-hidden="true"><div class="cover-frame"><span class="cover-imprint">${esc(SITE_NAME)} · 藏书</span><span class="cover-title">${esc(title)}</span><span class="cover-author">${esc(author ?? '')}</span><div class="cover-seal">灯下</div></div><div class="cover-orbit"></div></div>`;

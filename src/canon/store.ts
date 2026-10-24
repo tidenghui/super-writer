@@ -61,6 +61,12 @@ export interface ChapterBeat {
   day?: number;
   /** 本章出场角色的 id。写死它，写手才不会自己造人。 */
   cast?: string[];
+  /**
+   * 这一章成立所依赖的**书里已经存在的东西**：物件、地点、关系、事实。
+   * 引擎逐条回查，书里没有的就退回重写。
+   * 高潮章最容易犯这个错：它默认读者已经知道一堆前面没埋的东西。
+   */
+  requires?: string[];
 }
 
 export interface Outline {
