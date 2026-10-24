@@ -3,7 +3,7 @@ import { extractJson, countChars } from './json.ts';
 import { mapLimit } from './util.ts';
 import { isMock } from './mock.ts';
 import { applyPatches, type Patch } from './patch.ts';
-import { lintProse, formatViolations, chapterShape, repetitionWarnings } from './lint.ts';
+import { lintProse, formatViolations, chapterShape, repetitionWarnings, redlineViolations } from './lint.ts';
 import {
   bookBriefing,
   beatFor,
@@ -383,7 +383,7 @@ async function cleanDraft(
   n: number,
   body: string,
 ): Promise<{ body: string; before: number; fixed: number }> {
-  const violations = lintProse(body);
+  const violations = [...lintProse(body), ...redlineViolations(body)];
   if (violations.length === 0) return { body, before: 0, fixed: 0 };
 
   log('体检', `命中 ${violations.length} 处（禁用词/失声/长句/情绪直陈），定点清洗…`);
@@ -396,6 +396,9 @@ ${styleRules(book)}
 
 铁律：
 - 只替换有问题的句子，其余一个字都不要动。
+- 标着「越界」的句子，是这个角色**说不出这种话**。改法不是换个委婉说法，而是：
+  让他说不出来（卡住、咳嗽、改口）、或者换一个人说、或者改成动作和暗示。
+  绝对不能保留原来那层信息。
 - find 必须是原文里逐字存在、且只出现一次的片段。
 - replace 保持原意、保持长度量级，不许新增情节。
 - 改不掉就跳过。`,
@@ -420,7 +423,7 @@ ${styleRules(book)}
   }
 
   const r = applyPatches(body, patches);
-  const after = lintProse(r.body).length;
+  const after = lintProse(r.body).length + redlineViolations(r.body).length;
   log('体检', `修好 ${violations.length - after} 处，剩 ${after} 处`);
 
   return { body: r.body, before: violations.length, fixed: violations.length - after };

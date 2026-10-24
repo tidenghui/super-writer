@@ -9,7 +9,7 @@
  */
 
 export interface Violation {
-  kind: '禁用词' | '失声' | '长句' | '情绪直陈';
+  kind: '禁用词' | '失声' | '长句' | '情绪直陈' | '越界';
   /** 命中的词或规则说明 */
   rule: string;
   /** 原文里出问题的句子 */
@@ -107,6 +107,102 @@ export function lintProse(body: string): Violation[] {
     seen.add(k);
     return true;
   });
+}
+
+/**
+ * 角色红线。
+ *
+ * 有三条规则是「这个人说不出这句话」，不是文笔问题：
+ *   - 老周舌上有禁制，涉及墨池/献祭的直白陈述他说不出来
+ *   - 柳青梧是执法堂，不知道墨池真相
+ *   - 玄清不主动交底
+ *
+ * 这类约束交给模型自觉是靠不住的（实测三轮里违反率仍很高）。
+ * 但它是**可判定的**：找到引号里的话，找到说话的人，看有没有踩词。
+ * 所以放在这里，机械拦截。
+ */
+interface SpeakerRule {
+  name: string;
+  aliases: string[];
+  banned: string[];
+  why: string;
+}
+
+const SPEAKER_RULES: SpeakerRule[] = [
+  {
+    name: '老周',
+    aliases: ['老周', '周无咎'],
+    banned: ['墨池', '献祭', '入池', '写成书', '抄成', '换一人', '书里', '最后一页', '第七行', '后山潭'],
+    why: '舌上有禁制，说不出墨池真相的直白陈述',
+  },
+  {
+    name: '柳青梧',
+    aliases: ['柳青梧'],
+    banned: ['墨池', '献祭', '入池', '换一人', '写成书', '抄成书'],
+    why: '执法堂只查刑律，不知墨池真相',
+  },
+  {
+    name: '玄清',
+    aliases: ['玄清'],
+    banned: ['自己走进', '换一人', '池底', '水底', '抄的是人'],
+    why: '知道一切但不主动交底',
+  },
+];
+
+/**
+ * 判断这句话是谁说的。
+ *
+ * 只认两种可靠形式：
+ *   1. 名字 + 说话动词（老周说 / 玄清道 / 柳青梧问）
+ *   2. 名字 + 冒号，紧贴引号（老周：“……”）
+ *
+ * 早先的做法是「附近有名字就算他说」，结果把沈砚的话算到老周头上——
+ * 误报比漏报更糟：它会让修订去改一句本来没问题的话。
+ */
+const SPEECH_VERB = /(说|道|问|答|喊|叫|开口|低声|笑道|吼道)/;
+
+function attributeQuote(text: string, start: number, end: number): SpeakerRule | null {
+  const before = text.slice(Math.max(0, start - 30), start);
+
+  for (const rule of SPEAKER_RULES) {
+    for (const alias of rule.aliases) {
+      // 形式二：名字 + 冒号紧贴引号
+      if (new RegExp(`${alias}\\s*[:：]\\s*$`).test(before)) return rule;
+
+      // 形式一：名字后面 8 字内有说话动词
+      const idx = before.lastIndexOf(alias);
+      if (idx >= 0) {
+        const tail = before.slice(idx + alias.length);
+        // 同一个小句里，名字后 12 字内出现说话动词
+        if (tail.length <= 12 && !/[。！？]/.test(tail) && SPEECH_VERB.test(tail)) return rule;
+      }
+    }
+  }
+  return null;
+}
+
+export function redlineViolations(body: string): Violation[] {
+  const out: Violation[] = [];
+  const quoteRe = /[“「]([^”」]{1,120})[”」]/g;
+
+  let m: RegExpExecArray | null;
+  while ((m = quoteRe.exec(body)) !== null) {
+    const utterance = m[1] ?? '';
+    const start = m.index;
+    const end = m.index + m[0].length;
+    const who = attributeQuote(body, start, end);
+    if (!who) continue;
+
+    const hit = who.banned.find((w) => utterance.includes(w));
+    if (hit) {
+      out.push({
+        kind: '越界',
+        rule: `${who.name}${who.why}，但这句里出现了「${hit}」`,
+        sentence: m[0],
+      });
+    }
+  }
+  return out;
 }
 
 export function formatViolations(vs: Violation[]): string {
