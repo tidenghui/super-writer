@@ -290,11 +290,16 @@ ${body}
 </urlset>`;
 }
 
-/** 已发布的章：到第一个未定稿为止，连载不能有洞 */
+/**
+ * 对外可见的章：走到第一个「还没定稿」或「还没到发布点」为止。
+ * 连载不能有洞，也不能提前漏出来。
+ */
 function publishingChapters(slug: string): ChapterMeta[] {
   const out: ChapterMeta[] = [];
+  const now = Date.now();
   for (const m of listChapterMetas(slug)) {
     if (m.status !== 'accepted') break;
+    if (m.publishAt && Date.parse(m.publishAt) > now) break;
     out.push(m);
   }
   return out;

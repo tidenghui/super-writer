@@ -3,7 +3,7 @@ import { extractJson, countChars } from './json.ts';
 import { mapLimit } from './util.ts';
 import { isMock } from './mock.ts';
 import { applyPatches, type Patch } from './patch.ts';
-import { lintProse, formatViolations, chapterShape, repetitionWarnings, redlineViolations } from './lint.ts';
+import { lintProse, formatViolations, chapterShape, repetitionWarnings, redlineViolations, quoteViolations } from './lint.ts';
 import {
   bookBriefing,
   beatFor,
@@ -26,6 +26,8 @@ import {
   saveChapter,
   savePromises,
   patchChapterMeta,
+  listChapterMetas,
+  schedulePublish,
   type BookHandle,
   type ChapterMeta,
   type Promise_,
@@ -383,7 +385,7 @@ async function cleanDraft(
   n: number,
   body: string,
 ): Promise<{ body: string; before: number; fixed: number }> {
-  const violations = [...lintProse(body), ...redlineViolations(body)];
+  const violations = [...lintProse(body), ...redlineViolations(body), ...quoteViolations(body)];
   if (violations.length === 0) return { body, before: 0, fixed: 0 };
 
   log('体检', `命中 ${violations.length} 处（禁用词/失声/长句/情绪直陈），定点清洗…`);
@@ -423,7 +425,7 @@ ${styleRules(book)}
   }
 
   const r = applyPatches(body, patches);
-  const after = lintProse(r.body).length + redlineViolations(r.body).length;
+  const after = lintProse(r.body).length + redlineViolations(r.body).length + quoteViolations(r.body).length;
   log('体检', `修好 ${violations.length - after} 处，剩 ${after} 处`);
 
   return { body: r.body, before: violations.length, fixed: violations.length - after };
@@ -887,10 +889,15 @@ export async function finalize(book: BookHandle, result: ChapterResult): Promise
     fact: f.fact,
   }));
 
+  // 定稿的章才排发布槽；草稿不占坑
+  const publishAt =
+    result.accepted ? schedulePublish(listChapterMetas(book.slug).filter((m) => m.n !== n)) : undefined;
+
   const chapterMeta: ChapterMeta = {
     n,
     title: plan.title,
     status: result.accepted ? 'accepted' : 'draft',
+    ...(publishAt ? { publishAt } : {}),
     wordCount: countChars(body),
     summary: update.summary,
     coldRead: tally(cold),
@@ -1235,3 +1242,41 @@ export async function runMany(bookSlug: string, from: number, to: number): Promi
 }
 
 export { mapLimit };
+
+
+/**
+ * 攒缓冲。
+ *
+ * 生产和发布解耦：发布是每天 20:00 一章，生产可以快得多。
+ * 手上永远留 N 章待发，某章回炉重写不会让读者断更。
+ */
+export async function buildBacklog(bookSlug: string, ahead: number): Promise<void> {
+  const book = loadBook(bookSlug);
+
+  let guard = 0;
+  while (guard++ < 20) {
+    const metas = listChapterMetas(bookSlug);
+    const pending = metas.filter((m) => m.status === 'accepted' && (m.publishAt ?? '') > new Date().toISOString()).length;
+    if (pending >= ahead) {
+      console.log(`\n  缓冲够用：${pending} 章待发（目标 ${ahead}）\n`);
+      return;
+    }
+
+    const next = (metas.filter((m) => m.status === 'accepted').at(-1)?.n ?? 0) + 1;
+    const total = book.bible.outline.chapters.length;
+    if (next > total) {
+      console.log(`\n  全书写完（${total} 章）\n`);
+      return;
+    }
+
+    console.log(`\n  待发 ${pending} 章，写第 ${next} 章…`);
+    const res = await runChapter({ bookSlug, n: next });
+    if (!res.accepted) {
+      console.log(
+        `\n  第 ${next} 章没过闸门，缓冲暂停。修好再继续：\n` +
+          `    npm run chapter -- --n ${next} --resume\n`,
+      );
+      return;
+    }
+  }
+}

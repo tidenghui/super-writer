@@ -75,6 +75,35 @@ export interface ChapterMeta {
   revisions?: number;
   costCny?: number;
   createdAt: string;
+  /**
+   * 预定发布时间（ISO）。没有这个字段的章当作「早就发了」。
+   * 生产和发布解耦：写多快都行，到点才放出来。
+   */
+  publishAt?: string;
+}
+
+/** 北京时间的下一个晚上 20:00（无夏令时，直接 +8） */
+const BJ_OFFSET = 8 * 3600_000;
+export function nextPublishSlot(afterMs: number): number {
+  const DAY = 86400_000;
+  const bj = afterMs + BJ_OFFSET;
+  let slot = Math.floor(bj / DAY) * DAY + 20 * 3600_000;
+  if (slot <= bj) slot += DAY;
+  return slot - BJ_OFFSET;
+}
+
+/** 给新章排下一个发布槽：接在已有排期之后 */
+export function schedulePublish(metas: ChapterMeta[]): string {
+  const last = metas
+    .map((m) => (m.publishAt ? Date.parse(m.publishAt) : NaN))
+    .filter((t) => !Number.isNaN(t))
+    .sort((a, b) => b - a)[0];
+  return new Date(nextPublishSlot(Math.max(Date.now(), last ?? 0))).toISOString();
+}
+
+/** 该发但还没发的章（按顺序，遇到未定稿或未到点就停） */
+export function isLive(m: ChapterMeta, now = Date.now()): boolean {
+  return !m.publishAt || Date.parse(m.publishAt) <= now;
 }
 
 export interface Bible {
@@ -196,6 +225,7 @@ export function saveChapter(
     ...(meta.revisions !== undefined ? { revisions: meta.revisions } : {}),
     ...(meta.costCny !== undefined ? { costCny: meta.costCny } : {}),
     createdAt: new Date().toISOString(),
+    ...(meta.publishAt ? { publishAt: meta.publishAt } : {}),
   };
 
   writeAtomic(resolve(dir, `${pad}.md`), body.trim() + '\n');

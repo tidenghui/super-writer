@@ -9,7 +9,7 @@
  */
 
 export interface Violation {
-  kind: '禁用词' | '失声' | '长句' | '情绪直陈' | '越界';
+  kind: '禁用词' | '失声' | '长句' | '情绪直陈' | '越界' | '引号';
   /** 命中的词或规则说明 */
   rule: string;
   /** 原文里出问题的句子 */
@@ -179,6 +179,30 @@ function attributeQuote(text: string, start: number, end: number): SpeakerRule |
     }
   }
   return null;
+}
+
+/**
+ * 引号配对。
+ *
+ * 看着很蠢，但这是模型最容易犯、读者最容易卡住的错：
+ * 多一个右引号，手机上就会读成"对话断了又接上"。
+ */
+export function quoteViolations(body: string): Violation[] {
+  const out: Violation[] = [];
+  for (const para of body.split(/\n{2,}/)) {
+    const text = para.trim();
+    if (!text) continue;
+    const left = (text.match(/[“「]/g) ?? []).length;
+    const right = (text.match(/[”」]/g) ?? []).length;
+    if (left !== right) {
+      out.push({
+        kind: '引号',
+        rule: `左引号 ${left} 个、右引号 ${right} 个，不配对`,
+        sentence: text.slice(0, 80),
+      });
+    }
+  }
+  return out;
 }
 
 export function redlineViolations(body: string): Violation[] {

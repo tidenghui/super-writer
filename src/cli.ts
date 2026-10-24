@@ -2,7 +2,7 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadEnv, ROOT, runsDir, resolveRole, checkCriticDiversity } from './engine/config.ts';
-import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapter, polishChapter, runMany } from './engine/chapter.ts';
+import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapter, polishChapter, runMany, buildBacklog } from './engine/chapter.ts';
 import { runAllCritics } from './engine/critics.ts';
 import { runColdReaders, firstScreenAll, comparePair } from './engine/coldRead.ts';
 import { isMock } from './engine/mock.ts';
@@ -168,6 +168,15 @@ async function cmdOutline(): Promise<void> {
   console.log(
     `\n  完成 ${reports.length} 章${bad.length ? `，其中 ${bad.length} 章复核仍有问题` : '，全部复核通过'}\n`,
   );
+}
+
+/** 补缓冲：写到手上有 N 章待发为止 */
+async function cmdBacklog(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const dir = resolve(runsDir(slug), `backlog-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+  await buildBacklog(slug, Number(flag('ahead') ?? 5));
 }
 
 /** 连更：从第 X 章写到第 Y 章，中途失败就停下，不硬撑 */
@@ -540,8 +549,8 @@ async function cmdNight(): Promise<void> {
     }
   }
 
-  // 黄金三章跑三个变体挑一个，之后一天一章
-  await runWithCandidates(slug, next, next <= 3 ? 3 : 1);
+  // 产发分离：把待发缓冲补到 N 章，而不是只写一章
+  await buildBacklog(slug, Number(flag('ahead') ?? 5));
 }
 
 function help(): void {
@@ -561,6 +570,7 @@ function help(): void {
     npm run recanon -- --n 1                    从定稿正文重算某章的事实与伏笔
     npm run audit   [--book slug]               全书漂移审计
     npm run night   [--book slug]               夜班：审计 + 写下一章（给 crontab 用）
+    npm run backlog [--ahead 5]                 补缓冲：写到手上有 N 章待发
     npm run outline -- --from 13 --to 20        把梗概扩成章纲（策划自己写）
     npm run write   -- --from 7 --to 10         连更若干章
 
@@ -592,6 +602,8 @@ async function main(): Promise<void> {
       return cmdFirstScreen();
     case 'compare':
       return cmdCompare();
+    case 'backlog':
+      return cmdBacklog();
     case 'outline':
       return cmdOutline();
     case 'write':
