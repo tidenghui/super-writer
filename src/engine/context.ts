@@ -2,6 +2,7 @@ import {
   loadChapter,
   loadFacts,
   loadBookInfo,
+  loadTraits,
   listChapterMetas,
   summaryIndex,
   openPromises,
@@ -57,6 +58,8 @@ export function actFor(book: BookHandle, n: number): string {
 
 export function castSheet(book: BookHandle, ids: string[]): string {
   const byId = new Map(book.bible.characters.map((c) => [c.id, c]));
+  // 引擎从正文里长出来的特征，和人物卡里的并列使用
+  const traits = loadTraits(book.slug);
   const picked: Character[] = ids.map((id) => byId.get(id)).filter((c): c is Character => !!c);
   if (picked.length === 0) return '（本章登场的人物见场景表）';
 
@@ -69,7 +72,11 @@ export function castSheet(book: BookHandle, ids: string[]): string {
         `- 怕：${c.fears}`,
         c.secret ? `- 秘密（读者此时未必知道，但你必须守住一致性）：${c.secret}` : '',
         `- 外形：${c.appearance}`,
-        c.signature?.length ? `- 签名特征（必须照此写，写错就是串味）：${c.signature.join('；')}` : '',
+        (() => {
+          const learned = traits.filter((t) => t.who === c.id || t.who === c.name).map((t) => t.trait);
+          const all = [...new Set([...(c.signature ?? []), ...learned])];
+          return all.length ? `- 签名特征（必须照此写，写错就是串味）：${all.join('；')}` : '';
+        })(),
       ]
         .filter(Boolean)
         .join('\n'),

@@ -324,9 +324,58 @@ export interface HardRule {
 }
 
 export function loadRules(slug: string): HardRule[] {
-  const p = resolve(bookDir(slug), 'bible', 'rules.json');
-  if (!existsSync(p)) return [];
-  return JSON.parse(read(p)) as HardRule[];
+  const seed = resolve(bookDir(slug), 'bible', 'rules.json');
+  const auto = resolve(bookDir(slug), 'canon', 'rules.auto.json');
+  const out: HardRule[] = [];
+  for (const p of [seed, auto]) {
+    if (!existsSync(p)) continue;
+    out.push(...(JSON.parse(read(p)) as HardRule[]));
+  }
+  return out;
+}
+
+/**
+ * 引擎自己抽出来的规则（不许人工编辑）。
+ * 和 bible/rules.json 分开存：那份是人给的种子，这份是长出来的。
+ */
+export function loadAutoRules(slug: string): HardRule[] {
+  const p = resolve(bookDir(slug), 'canon', 'rules.auto.json');
+  return existsSync(p) ? (JSON.parse(read(p)) as HardRule[]) : [];
+}
+
+export function saveAutoRulesForChapter(slug: string, chapter: number, rules: HardRule[]): void {
+  const kept = loadAutoRules(slug).filter((r) => r.sinceChapter !== chapter);
+  const all = [...kept, ...rules.map((r) => ({ ...r, sinceChapter: chapter }))];
+  writeAtomic(resolve(bookDir(slug), 'canon', 'rules.auto.json'), JSON.stringify(all, null, 2) + '\n');
+}
+
+// ─────────────────────────────────────────────────────────────
+// 角色特征：引擎从正文里长出来的，不许人工编辑
+// ─────────────────────────────────────────────────────────────
+
+export interface Trait {
+  /** 角色 id 或名字 */
+  who: string;
+  /** 走路姿态、口癖、习惯动作、说话方式 */
+  trait: string;
+  fromChapter: number;
+}
+
+export function loadTraits(slug: string): Trait[] {
+  const p = resolve(bookDir(slug), 'canon', 'traits.json');
+  return existsSync(p) ? (JSON.parse(read(p)) as Trait[]) : [];
+}
+
+export function saveTraitsForChapter(slug: string, chapter: number, traits: Trait[]): void {
+  const kept = loadTraits(slug).filter((t) => t.fromChapter !== chapter);
+  const seen = new Set(kept.map((t) => `${t.who}|${t.trait}`));
+  const fresh = traits
+    .map((t) => ({ ...t, fromChapter: chapter }))
+    .filter((t) => !seen.has(`${t.who}|${t.trait}`));
+  writeAtomic(
+    resolve(bookDir(slug), 'canon', 'traits.json'),
+    JSON.stringify([...kept, ...fresh], null, 2) + '\n',
+  );
 }
 
 export function saveRules(slug: string, rules: HardRule[]): void {

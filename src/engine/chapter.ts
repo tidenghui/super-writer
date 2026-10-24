@@ -34,10 +34,13 @@ import {
   saveChapter,
   savePromises,
   loadRules,
+  saveTraitsForChapter,
+  saveAutoRulesForChapter,
   patchChapterMeta,
   listChapterMetas,
   type BookHandle,
   type ChapterMeta,
+  type ChapterBeat,
   type Promise_,
   type Fact,
 } from '../canon/store.ts';
@@ -88,6 +91,19 @@ export interface ChapterResult {
 
 const log = (stage: string, msg: string) => console.log(`  \x1b[2m${stage}\x1b[0m ${msg}`);
 
+/**
+ * 时间锚点。
+ *
+ * 以前只给了策划，写手拿不到——所以它会把「还有三天」写成「还有四天」，
+ * 或者把入池日往后挪一天。天数是读者会数的东西，写手必须知道。
+ */
+function timeAnchor(beat: ChapterBeat): string {
+  if (beat.day === undefined) return '';
+  const deadline = beat.day < 7 ? 7 : 14;
+  const label = beat.day < 7 ? '定名' : '入池';
+  return `## 时间锚点\n今天是第 ${beat.day} 天，距${label}还有 ${deadline - beat.day} 天。\n这一章的正文里必须出现一个具体的时间信号（剩余天数、更漏、天色、或者别人提起那个日子），让读者始终感到期限在逼近。\n**天数是硬数字，不许写错，读者会算。**`;
+}
+
 // ─────────────────────────────────────────────────────────────
 // 阶段 1：规划
 // ─────────────────────────────────────────────────────────────
@@ -108,13 +124,7 @@ ${styleRules(book)}`;
     progressBrief(book, n),
     promiseBrief(book, n),
     factsBrief(book, n),
-    beat.day !== undefined
-      ? (() => {
-          const deadline = beat.day < 7 ? 7 : 14;
-          const label = beat.day < 7 ? '定名' : '入池';
-          return `## 时间锚点\n今天是第 ${beat.day} 天，距${label}还有 ${deadline - beat.day} 天。\n这一章的正文里必须出现一个具体的时间信号（剩余天数、更漏、天色、或者别人提起那个日子），让读者始终感到期限在逼近。\n**天数是硬数字，不许写错，读者会算。**`;
-        })()
-      : '',
+    timeAnchor(beat),
     `## 第 ${n} 章的大纲（必须落实，不许改主线）
 标题（暂定）：${beat.title}
 这一章存在的理由：${beat.purpose}
@@ -289,6 +299,7 @@ async function draft(
   n: number,
   plan: ChapterPlan,
   opening: string,
+  anchor: string,
   temperature?: number,
 ): Promise<string> {
   const castIds = [...new Set(plan.scenes.flatMap((s) => s.cast))];
@@ -669,6 +680,10 @@ interface CanonUpdate {
   newFacts: Array<{ subject: string; fact: string }>;
   promiseUpdates: Array<{ id: string; paidAt: number | null }>;
   newPromises: Array<{ text: string; dueBy: number; importance: 1 | 2 | 3 }>;
+  /** 本章确立的角色特征：走路姿态、口癖、习惯动作 */
+  newTraits?: Array<{ who: string; trait: string }>;
+  /** 本章确立的禁忌：谁不能说/不能怎么写 */
+  newRules?: Array<{ who: string; aliases: string[]; cannotSay: string[]; notNear?: string[]; why: string }>;
 }
 
 async function recordCanon(book: BookHandle, n: number, title: string, body: string): Promise<CanonUpdate> {
@@ -689,9 +704,13 @@ async function recordCanon(book: BookHandle, n: number, title: string, body: str
       `2. newFacts：这一章新确立的、后面必须遵守的事实（人名、地点、物件、规则、时间）。最多 6 条。`,
       `3. promiseUpdates：这一章还掉了哪些债。只填真的还了的。没还的不要列。`,
       `4. newPromises：这一章新埋的伏笔。最多 2 条，并给出应该在多少章内回收（dueBy，绝对值）。`,
+      `5. newTraits：这一章**明写出来**的角色特征——走路姿态、口癖、习惯动作、说话方式。`,
+      `   只记正文里真的写出来的，不推测。who 用角色 id。最多 3 条。`,
+      `6. newRules：这一章**明写出来**的禁忌——某人被下了封口令、某人说某类话会出事。`,
+      `   没有就留空，不要编。最多 1 条。`,
       '',
       `只输出 JSON：
-{"summary":"...","newFacts":[{"subject":"...","fact":"..."}],"promiseUpdates":[{"id":"p1","paidAt":${n}}],"newPromises":[{"text":"...","dueBy":${n + 5},"importance":2}]}`,
+{"summary":"...","newFacts":[{"subject":"...","fact":"..."}],"promiseUpdates":[{"id":"p1","paidAt":${n}}],"newPromises":[{"text":"...","dueBy":${n + 5},"importance":2}],"newTraits":[{"who":"liuqingwu","trait":"走路三下一样重"}],"newRules":[{"who":"老周","aliases":["老周"],"cannotSay":["墨池"],"why":"舌上有禁制"}]}`,
     ].join('\n\n---\n\n'),
     json: true,
     maxTokens: 2500,
@@ -704,6 +723,8 @@ async function recordCanon(book: BookHandle, n: number, title: string, body: str
     newFacts: raw.newFacts ?? [],
     promiseUpdates: raw.promiseUpdates ?? [],
     newPromises: raw.newPromises ?? [],
+    newTraits: raw.newTraits ?? [],
+    newRules: raw.newRules ?? [],
   };
 }
 
@@ -794,7 +815,7 @@ export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
     const { opening, why } = await chooseOpening(book, n, plan, profile.openings);
     log('开场', why);
     log('起草', `目标 ${plan.wordTarget} 字…`);
-    body = await draft(book, n, plan, opening, temperature);
+    body = await draft(book, n, plan, opening, timeAnchor(beatFor(book, n)), temperature);
     body = await expandIfShort(book, n, body, plan.wordTarget);
     log('起草', `初稿 ${countChars(body)} 字`);
   }
@@ -991,6 +1012,12 @@ export async function finalize(book: BookHandle, result: ChapterResult): Promise
   if (persist) {
     savePromises(book.slug, promises);
     replaceFacts(book.slug, n, facts);
+    saveTraitsForChapter(
+      book.slug,
+      n,
+      (update.newTraits ?? []).map((t) => ({ who: t.who, trait: t.trait, fromChapter: n })),
+    );
+    if ((update.newRules ?? []).length) saveAutoRulesForChapter(book.slug, n, update.newRules ?? []);
     saveChapter(book.slug, n, plan.title, body, chapterMeta);
   } else {
     log('归档', 'mock 模式：不写盘（要写盘设 SW_MOCK_SAVE=1）');
@@ -1279,6 +1306,12 @@ export async function recanonChapter(bookSlug: string, n: number): Promise<void>
     fact: f.fact,
   }));
   replaceFacts(bookSlug, n, facts);
+  saveTraitsForChapter(
+    bookSlug,
+    n,
+    (update.newTraits ?? []).map((t) => ({ who: t.who, trait: t.trait, fromChapter: n })),
+  );
+  if ((update.newRules ?? []).length) saveAutoRulesForChapter(bookSlug, n, update.newRules ?? []);
 
   const promises = dropGeneratedPromises(book.bible.promises, n).map((p) => {
     const upd = update.promiseUpdates.find((u) => u.id === p.id);
