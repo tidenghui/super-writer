@@ -136,7 +136,7 @@ async function reviewBeat(
   beat: ChapterBeat,
 ): Promise<{ ok: boolean; issues: string[] }> {
   const res = await callLLM({
-    role: 'critic',
+    role: 'outlineReview',
     system: `你是这本书的责任编辑，只审章纲，**只拦硬伤**。
 
 硬伤只有三种，其余一律不要提：
@@ -190,7 +190,7 @@ export async function expandOutline(
     }
 
     // 改到过为止。人和模型一样，第一版总会有漏洞；关键是有没有人在盯。
-    const MAX_ROUNDS = 3;
+    const MAX_ROUNDS = 2;
     // 天数由代码推进：上一章 +1，但不越过入池（第 14 天）
     const prevDay = outline.chapters.filter((c) => c.n < n && c.day !== undefined).at(-1)?.day ?? n - 1;
     const day = Math.min(14, prevDay + 1);

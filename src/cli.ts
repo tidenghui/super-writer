@@ -433,22 +433,25 @@ async function auditBook(slug: string): Promise<DriftReport> {
   const metas = listChapterMetas(slug).filter((m) => m.status === 'accepted');
   if (metas.length === 0) throw new Error('还没有任何章节');
 
-  const text = metas
+  // 不吃全书原文：摘要 + 事实表 + 最近 5 章。省 60% 输入，判断更聚焦。
+  const recent = metas.slice(-5);
+  const recentText = recent
     .map((m) => {
       const ch = loadChapter(slug, m.n);
-      return `\n\n### 第${m.n}章《${m.title}》\n${ch?.body ?? ''}`;
+      return `### 第${m.n}章《${m.title}》\n${ch?.body ?? ''}`;
     })
-    .join('');
+    .join('\n\n');
 
+  const summaries = metas.map((m) => `第${m.n}章《${m.title}》：${m.summary || '（无摘要）'}`).join('\n');
 
   const res = await callLLM({
     role: 'auditor',
-    system: `你是这本连载小说的连续性总编。你唯一的工作是把已经写出来的全部章节从头读一遍，找出作者自己看不见的漂移。
+    system: `你是这本连载小说的连续性总编。你唯一的工作是把书从头读一遍，找出作者自己看不见的漂移。
 
 找出这些：
 - 角色口吻变形（越写越像同一个人）
 - 与设定冲突
-- 前后矛盾的事实（物件、时间、地点、伤势）
+- 前后矛盾的事实（物件、时间、地点、伤势、人称）
 - 埋了没还的伏笔
 - 重复使用的桥段和句式
 
@@ -461,8 +464,10 @@ async function auditBook(slug: string): Promise<DriftReport> {
         .filter((p) => p.paidAt === null)
         .map((p) => `- [${p.id}] ${p.text}（应在第${p.dueBy}章前还）`)
         .join('\n'),
-      `## 全书正文`,
-      text,
+      `## 全书章节摘要`,
+      summaries,
+      `## 最近 ${recent.length} 章原文`,
+      recentText,
       `## 输出`,
       `只输出 JSON，不要解释，不要 Markdown 代码块。drift 最多 6 条，挑最要命的：`,
       `{
@@ -471,7 +476,7 @@ async function auditBook(slug: string): Promise<DriftReport> {
 }`,
     ].join('\n\n---\n\n'),
     json: true,
-    maxTokens: 16000,
+    maxTokens: 6000,
     label: 'audit',
   });
 

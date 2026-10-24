@@ -10,6 +10,11 @@
       "protocol": "openai",
       "baseUrl": "https://api.moonshot.cn/v1",
       "apiKeyEnv": "MOONSHOT_API_KEY"
+    },
+    "openai": {
+      "protocol": "openai",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKeyEnv": "OPENAI_API_KEY"
     }
   },
   "pricingCnyPerMTok": {
@@ -24,6 +29,14 @@
     "moonshot-v1-32k": {
       "in": 24,
       "out": 24
+    },
+    "gpt-6.1-sol": {
+      "in": 14.4,
+      "out": 72
+    },
+    "gpt-6-luna": {
+      "in": 0.72,
+      "out": 3.6
     }
   },
   "roles": {
@@ -63,9 +76,9 @@
       "temperature": 0.8
     },
     "auditor": {
-      "provider": "deepseek",
-      "model": "deepseek-reasoner",
-      "temperature": 0.3
+      "provider": "openai",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "low"
     },
     "canonRecorder": {
       "provider": "deepseek",
@@ -76,7 +89,22 @@
       "provider": "deepseek",
       "model": "deepseek-chat",
       "temperature": 0.2
+    },
+    "outlineReview": {
+      "provider": "openai",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "low"
+    },
+    "arbiter": {
+      "provider": "openai",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "low"
+    },
+    "coldReaderStrict": {
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "reasoningEffort": "low"
     }
   },
-  "_note": "不要给角色加 reasoningEffort：实测传这个参数反而会开启推理，更慢更贵。deepseek-reasoner 永远推理，deepseek-chat 不传该参数时零推理。"
+  "_note": "reasoningEffort 只对 openai 生效。DeepSeek 传这个参数反而会开启推理，别加。"
 }

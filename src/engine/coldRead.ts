@@ -19,12 +19,15 @@ interface Persona {
   id: string;
   name: string;
   bio: string;
+  /** 用哪个模型。vet eran 用 OpenAI，当最难伺候的那个。 */
+  model?: 'coldReader' | 'coldReaderStrict';
 }
 
 const PERSONAS: Persona[] = [
   {
     id: 'veteran',
     name: '老书虫',
+    model: 'coldReaderStrict',
     bio: `三十四岁，看了十五年网文，至少三千本。仙侠、武侠、玄幻全都读过，套路免疫。
 他现在最恨三件事：降智、注水、装神弄鬼。一个词用得不对他就出戏。
 他不在乎文笔好不好。他在乎「这个作者有没有把我当傻子」。
@@ -102,7 +105,7 @@ export async function coldRead(
   p: Persona,
 ): Promise<ColdReadResult> {
   const res = await callLLM({
-    role: 'coldReader',
+    role: p.model ?? 'coldReader',
     system: system(p),
     user: user(book, chapterNo, body),
     json: true,

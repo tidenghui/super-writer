@@ -68,15 +68,24 @@ export async function callLLM(opts: CallOpts): Promise<CallResult> {
 
   let maxTokens = opts.maxTokens ?? 4096;
 
+  // OpenAI 新模型用 max_completion_tokens；DeepSeek 只认 max_tokens
+  const isOpenAI = r.provider === 'openai';
+  const tokenField = isOpenAI ? 'max_completion_tokens' : 'max_tokens';
+
   const body: Record<string, unknown> = {
     model: r.model,
     messages: [
       { role: 'system', content: opts.system },
       { role: 'user', content: opts.user },
     ],
-    max_tokens: maxTokens,
+    [tokenField]: maxTokens,
     stream: false,
   };
+
+  // 推理强度：只对 OpenAI 传。DeepSeek 传了反而会开启推理（实测过）。
+  if (r.provider === 'openai' && r.reasoningEffort) {
+    body.reasoning_effort = r.reasoningEffort;
+  }
 
   // reasoner 类模型不接受 temperature
   if (r.temperature !== undefined && !/reasoner|r1|thinking/i.test(r.model)) {
@@ -119,7 +128,11 @@ export async function callLLM(opts: CallOpts): Promise<CallResult> {
           finish_reason?: string;
           message?: { content?: string; reasoning_content?: string };
         }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          completion_tokens_details?: { reasoning_tokens?: number };
+        };
       };
 
       const choice = data.choices?.[0];
@@ -145,7 +158,7 @@ export async function callLLM(opts: CallOpts): Promise<CallResult> {
 
         if (finish === 'length' && attempt < 3) {
           maxTokens = Math.min(maxTokens * 2, 32000);
-          (body as { max_tokens: number }).max_tokens = maxTokens;
+          (body as Record<string, number>)[tokenField] = maxTokens;
           console.warn(
             `  \x1b[33m!\x1b[0m ${label} 被 max_tokens=${maxTokens / 2} 截断（推理占了 ${reasoningLen} 字），翻倍重试`,
           );
@@ -160,6 +173,9 @@ export async function callLLM(opts: CallOpts): Promise<CallResult> {
         in: data.usage?.prompt_tokens ?? 0,
         out: data.usage?.completion_tokens ?? 0,
       };
+      const reasoning =
+        (data.usage as { completion_tokens_details?: { reasoning_tokens?: number } })
+          ?.completion_tokens_details?.reasoning_tokens ?? 0;
       const costCny =
         (usage.in / 1e6) * r.priceIn + (usage.out / 1e6) * r.priceOut;
 
@@ -176,6 +192,7 @@ export async function callLLM(opts: CallOpts): Promise<CallResult> {
         model: r.model,
         ms,
         usage,
+        reasoningTokens: reasoning,
         costCny: Number(costCny.toFixed(4)),
         system: opts.system,
         user: opts.user,

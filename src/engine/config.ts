@@ -58,7 +58,10 @@ export type Role =
   | 'coldReader'
   | 'auditor'
   | 'canonRecorder'
-  | 'summarizer';
+  | 'summarizer'
+  | 'outlineReview'
+  | 'arbiter'
+  | 'coldReaderStrict';
 
 interface ProviderCfg {
   protocol: 'openai';
@@ -69,10 +72,14 @@ interface ProviderCfg {
 interface ModelCfgFile {
   providers: Record<string, ProviderCfg>;
   pricingCnyPerMTok: Record<string, { in: number; out: number }>;
-  roles: Record<string, { provider: string; model: string; temperature?: number }>;
+  roles: Record<
+    string,
+    { provider: string; model: string; temperature?: number; reasoningEffort?: 'low' | 'medium' | 'high' }
+  >;
 }
 
 export interface ResolvedRole {
+  reasoningEffort?: 'low' | 'medium' | 'high';
   role: Role;
   provider: string;
   baseUrl: string;
@@ -114,6 +121,7 @@ export function resolveRole(role: Role): ResolvedRole {
   const price = cfg.pricingCnyPerMTok[entry.model];
   return {
     role,
+    ...(entry.reasoningEffort ? { reasoningEffort: entry.reasoningEffort } : {}),
     provider: entry.provider,
     baseUrl: baseUrl.replace(/\/$/, ''),
     apiKey,
