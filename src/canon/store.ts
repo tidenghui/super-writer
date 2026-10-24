@@ -55,6 +55,8 @@ export interface ChapterBeat {
   newFacts?: string[];
   /** 故事内的第几天（从 0 起）。有倒计时的书用它驱动节奏。 */
   day?: number;
+  /** 本章出场角色的 id。写死它，写手才不会自己造人。 */
+  cast?: string[];
 }
 
 export interface Outline {
@@ -230,6 +232,10 @@ export function replaceFacts(slug: string, chapter: number, facts: Fact[]): void
 export function dropGeneratedPromises(promises: Promise_[], chapter: number): Promise_[] {
   const prefix = `g${chapter}-`;
   return promises.filter((p) => !p.id.startsWith(prefix));
+}
+
+export function saveOutline(slug: string, outline: Outline): void {
+  writeAtomic(resolve(bookDir(slug), 'bible', 'outline.json'), JSON.stringify(outline, null, 2) + '\n');
 }
 
 export function savePromises(slug: string, promises: Promise_[]): void {

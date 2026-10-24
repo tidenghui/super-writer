@@ -23,7 +23,8 @@
     "compare": "tsx src/cli.ts compare",
     "score": "tsx src/cli.ts score",
     "polish": "tsx src/cli.ts polish",
-    "write": "tsx src/cli.ts write"
+    "write": "tsx src/cli.ts write",
+    "outline": "tsx src/cli.ts outline"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

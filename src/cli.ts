@@ -6,6 +6,7 @@ import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapte
 import { runAllCritics } from './engine/critics.ts';
 import { runColdReaders, firstScreenAll, comparePair } from './engine/coldRead.ts';
 import { isMock } from './engine/mock.ts';
+import { expandOutline } from './engine/outline.ts';
 import { readFileSync } from 'node:fs';
 import { enableCallLog } from './engine/util.ts';
 import { callLLM } from './engine/llm.ts';
@@ -148,6 +149,27 @@ async function cmdFix(): Promise<void> {
  * 每次换模型、改提示词之后跑一次：烂稿必须被拒绝，真稿必须被接受。
  * 如果哪天烂稿也能拿 3/3，说明这套判据已经失效了。
  */
+/** 卷纲 → 章纲：让策划把干瘪的梗概扩成可以直接开写的章纲 */
+async function cmdOutline(): Promise<void> {
+  const slug = flag('book') ?? 'cangjingge';
+  const from = Number(flag('from'));
+  const to = Number(flag('to'));
+  if (!from || !to) throw new Error('缺 --from 和 --to');
+
+  const book = loadBook(slug);
+  const dir = resolve(runsDir(slug), `outline-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  console.log(`\n  扩写章纲 第 ${from}–${to} 章\n`);
+  const reports = await expandOutline(book, from, to);
+
+  const bad = reports.filter((r) => !r.reviewed);
+  console.log(
+    `\n  完成 ${reports.length} 章${bad.length ? `，其中 ${bad.length} 章复核仍有问题` : '，全部复核通过'}\n`,
+  );
+}
+
 /** 连更：从第 X 章写到第 Y 章，中途失败就停下，不硬撑 */
 async function cmdWrite(): Promise<void> {
   const slug = flag('book') ?? 'cangjingge';
@@ -539,6 +561,7 @@ function help(): void {
     npm run recanon -- --n 1                    从定稿正文重算某章的事实与伏笔
     npm run audit   [--book slug]               全书漂移审计
     npm run night   [--book slug]               夜班：审计 + 写下一章（给 crontab 用）
+    npm run outline -- --from 13 --to 20        把梗概扩成章纲（策划自己写）
     npm run write   -- --from 7 --to 10         连更若干章
 
   选项
@@ -569,6 +592,8 @@ async function main(): Promise<void> {
       return cmdFirstScreen();
     case 'compare':
       return cmdCompare();
+    case 'outline':
+      return cmdOutline();
     case 'write':
       return cmdWrite();
     case 'score':
