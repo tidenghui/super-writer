@@ -162,7 +162,7 @@ async function cmdOutline(): Promise<void> {
   enableCallLog(resolve(dir, 'calls.jsonl'));
 
   console.log(`\n  扩写章纲 第 ${from}–${to} 章\n`);
-  const reports = await expandOutline(book, from, to);
+  const reports = await expandOutline(book, from, to, flag('ending') ?? '');
 
   const bad = reports.filter((r) => !r.reviewed);
   console.log(
@@ -577,6 +577,7 @@ function help(): void {
     npm run night   [--book slug]               夜班：审计 + 写下一章（给 crontab 用）
     npm run backlog [--ahead 5]                 补缓冲：写到手上有 N 章待发
     npm run outline -- --from 13 --to 20        把梗概扩成章纲（策划自己写）
+         --ending "一句话的结局方向"          倒推着铺路，且不许现造规则
     npm run write   -- --from 7 --to 10         连更若干章
 
   选项

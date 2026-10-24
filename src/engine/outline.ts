@@ -73,6 +73,7 @@ async function draftBeat(
   n: number,
   day: number,
   fixes: string[],
+  ending = '',
 ): Promise<ChapterBeat> {
   const metas = listChapterMetas(book.slug);
   const written = metas.filter((m) => m.n < n && m.status === 'accepted');
@@ -109,6 +110,9 @@ ${styleRules(book)}`,
       `## 还没还的债\n${open.map((p) => `- [${p.id}] ${p.text}（第${p.dueBy}章前）`).join('\n') || '（无）'}`,
       `## 可出场的角色（只能用这些 id，不许新造人）\n${castRoster(book)}`,
       `## 卷的位置\n${book.bible.outline.acts.map((a) => `- ${a.name}（第${a.from}–${a.to}章）${a.gist}`).join('\n')}`,
+      ending
+        ? `## 全书的结局方向（人定的，不许改）\n${ending}\n你这一章是在为它铺路。只能用书里已经存在的东西铺——前 22 章没写过的规则，一律不许现造。`
+        : '',
       `## 这一章现在只有一句梗概\n标题：${current?.title ?? '（未定）'}\n用途：${current?.purpose ?? '（未定）'}\n原节拍：${(current?.beats ?? []).join(' / ') || '（无）'}\n原钩子：${current?.hook ?? '（无）'}`,
       fixes.length ? `## 上一版被打回的原因（必须修掉）\n${fixes.map((f, i) => `${i + 1}. ${f}`).join('\n')}` : '',
       `## 你要产出什么`,
@@ -243,6 +247,7 @@ export async function expandOutline(
   book: BookHandle,
   from: number,
   to: number,
+  ending = '',
 ): Promise<OutlineReport[]> {
   const reports: OutlineReport[] = [];
   const outline = structuredClone(book.bible.outline);
@@ -270,7 +275,7 @@ export async function expandOutline(
       ),
     ];
 
-    let beat = await draftBeat(book, n, day, fixes);
+    let beat = await draftBeat(book, n, day, fixes, ending);
     beat.n = n;
     beat.day = day;
     const mech1 = mechanical(beat);
@@ -286,7 +291,7 @@ export async function expandOutline(
     for (let round = 2; round <= MAX_ROUNDS && !review.ok; round++) {
       console.log(`  第 ${n} 章：主编打回（第 ${round - 1} 轮）— ${review.issues[0] ?? ''}`);
       fixes = review.issues;
-      beat = await draftBeat(book, n, day, fixes);
+      beat = await draftBeat(book, n, day, fixes, ending);
       beat.n = n;
       beat.day = day;
       const mechN = mechanical(beat);
