@@ -27,7 +27,6 @@ import {
   savePromises,
   patchChapterMeta,
   listChapterMetas,
-  schedulePublish,
   type BookHandle,
   type ChapterMeta,
   type Promise_,
@@ -889,15 +888,12 @@ export async function finalize(book: BookHandle, result: ChapterResult): Promise
     fact: f.fact,
   }));
 
-  // 定稿的章才排发布槽；草稿不占坑
-  const publishAt =
-    result.accepted ? schedulePublish(listChapterMetas(book.slug).filter((m) => m.n !== n)) : undefined;
-
+  // 过了闸门就是可发布的：不排队、不控节奏。
+  // （publishAt 字段保留，将来要控节奏时再用；现在一律不设 = 立即可见）
   const chapterMeta: ChapterMeta = {
     n,
     title: plan.title,
     status: result.accepted ? 'accepted' : 'draft',
-    ...(publishAt ? { publishAt } : {}),
     wordCount: countChars(body),
     summary: update.summary,
     coldRead: tally(cold),
