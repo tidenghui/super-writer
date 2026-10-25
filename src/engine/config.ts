@@ -101,9 +101,36 @@ export function modelConfig(): ModelCfgFile {
   return cached;
 }
 
+/**
+ * 按进程覆盖角色模型。
+ *
+ * 用环境变量传，因为一次批量里每本书是独立进程，
+ * 环境变量不会串到别的书上；也不用改全局配置。
+ *
+ *   SW_ROLE_OVERRIDE='{"writer":{"provider":"openai","model":"gpt-6.1-sol"}}'
+ */
+interface RoleEntry {
+  provider: string;
+  model: string;
+  temperature?: number;
+  reasoningEffort?: 'low' | 'medium' | 'high';
+}
+
+function roleOverride(role: Role): RoleEntry | null {
+  const raw = process.env.SW_ROLE_OVERRIDE;
+  if (!raw) return null;
+  try {
+    const map = JSON.parse(raw) as Record<string, RoleEntry>;
+    return map[role] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function resolveRole(role: Role): ResolvedRole {
   const cfg = modelConfig();
-  const entry = cfg.roles[role];
+  const override = roleOverride(role);
+  const entry = override ?? cfg.roles[role];
   if (!entry) throw new Error(`config/models.json 里没有定义角色 "${role}"`);
 
   const provider = cfg.providers[entry.provider];

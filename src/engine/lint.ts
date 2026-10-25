@@ -9,7 +9,7 @@
  */
 
 export interface Violation {
-  kind: '禁用词' | '失声' | '长句' | '情绪直陈' | '越界' | '引号' | '人称' | '串味';
+  kind: '禁用词' | '失声' | '长句' | '情绪直陈' | '越界' | '引号' | '人称' | '串味' | '重复';
   /** 命中的词或规则说明 */
   rule: string;
   /** 原文里出问题的句子 */
@@ -338,6 +338,49 @@ export function chapterShape(body: string): Shape {
  * 单章看不出来，通读才看得出来：老周每章都咳、每章都用「不是A，是B」、
  * 每章灯芯都「短了」。写手会不知不觉把上一章的手法再抄一遍。
  */
+/**
+ * 重复解释。
+ *
+ * 读者最常抱怨的一条：「把每层意思都解释两遍」。
+ * 这是可判定的：同一章里出现两个高度相似的句子，就是在把话说两遍。
+ *
+ * 用字的二元组算重合度，取 0.62 作阈值——实测这个位置误报最少。
+ */
+export function repeatedExplaining(body: string): Violation[] {
+  const sentences = body
+    .split(/[。！？\n]+/)
+    .map((x) => x.trim())
+    .filter((x) => x.length >= 12);
+
+  const bigrams = (t: string) => {
+    const out = new Set<string>();
+    for (let i = 0; i + 1 < t.length; i++) out.add(t.slice(i, i + 2));
+    return out;
+  };
+
+  const sets = sentences.map(bigrams);
+  const out: Violation[] = [];
+
+  for (let i = 0; i < sentences.length; i++) {
+    for (let j = i + 1; j < sentences.length; j++) {
+      const a = sets[i]!;
+      const b = sets[j]!;
+      if (!a.size || !b.size) continue;
+      let inter = 0;
+      for (const g of a) if (b.has(g)) inter++;
+      const sim = inter / Math.min(a.size, b.size);
+      if (sim >= 0.62) {
+        out.push({
+          kind: '重复',
+          rule: '同一层意思说了两遍',
+          sentence: `${sentences[i]!.slice(0, 40)}　／　${sentences[j]!.slice(0, 40)}`,
+        });
+      }
+    }
+  }
+  return out.slice(0, 3);
+}
+
 export function repetitionWarnings(body: string): string[] {
   const out: string[] = [];
   const count = (re: RegExp) => (body.match(re) ?? []).length;

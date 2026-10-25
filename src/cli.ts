@@ -8,6 +8,7 @@ import { runColdReaders, firstScreenAll, comparePair } from './engine/coldRead.t
 import { isMock } from './engine/mock.ts';
 import { expandOutline } from './engine/outline.ts';
 import { createBook } from './engine/genesis.ts';
+import { produceBook } from './engine/batch.ts';
 import { readFileSync } from 'node:fs';
 import { enableCallLog } from './engine/util.ts';
 import { callLLM } from './engine/llm.ts';
@@ -191,6 +192,28 @@ async function cmdGenesis(): Promise<void> {
     chapters: Number(flag('chapters') ?? 14),
     author: flag('author') ?? '灯下人',
   });
+}
+
+/** 从一粒种子跑完一整本（无人值守） */
+async function cmdNewbook(): Promise<void> {
+  const slug = flag('slug');
+  const genre = flag('genre');
+  if (!slug) throw new Error('缺 --slug');
+  if (!genre) throw new Error('缺 --genre "题材"');
+
+  const dir = resolve(runsDir(slug), `newbook-${runId()}`);
+  mkdirSync(dir, { recursive: true });
+  enableCallLog(resolve(dir, 'calls.jsonl'));
+
+  const avoid = (flag('avoid') ?? '').split('|').filter(Boolean);
+  const r = await produceBook({
+    slug,
+    genre,
+    chapters: Number(flag('chapters') ?? 14),
+    avoid,
+    author: flag('author') ?? '灯下人',
+  });
+  if (!r.ok) process.exitCode = 2;
 }
 
 /** 补缓冲：写到手上有 N 章待发为止 */
@@ -598,6 +621,7 @@ function help(): void {
     npm run recanon -- --n 1                    从定稿正文重算某章的事实与伏笔
     npm run audit   [--book slug]               全书漂移审计
     npm run night   [--book slug]               夜班：审计 + 写下一章（给 crontab 用）
+    npm run newbook -- --slug b3 --genre "悬疑" --chapters 14
     npm run genesis -- --slug b2 --seed "一句种子" --ending "一句结局" --chapters 14
     npm run backlog [--ahead 5]                 补缓冲：写到手上有 N 章待发
     npm run outline -- --from 13 --to 20        把梗概扩成章纲（策划自己写）
@@ -632,6 +656,8 @@ async function main(): Promise<void> {
       return cmdFirstScreen();
     case 'compare':
       return cmdCompare();
+    case 'newbook':
+      return cmdNewbook();
     case 'genesis':
       return cmdGenesis();
     case 'backlog':
