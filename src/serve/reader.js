@@ -1,6 +1,7 @@
 /* Progressive enhancement: reading and navigation work without JavaScript. */
 (() => {
   const root = document.documentElement;
+  root.classList.add('js');
   const get = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
   const set = (key, value) => { try { localStorage.setItem(key, String(value)); } catch {} };
   const $ = (selector) => document.querySelector(selector);
@@ -67,14 +68,67 @@
     }
     syncSettings();
   });
-  all('[data-resume]').forEach(link => {
-    const last = Number(get(`sw:last:${link.dataset.resume}`));
-    const available = link.dataset.available.split(',').map(Number);
-    if (available.includes(last)) {
-      link.href = `/b/${encodeURIComponent(link.dataset.resume)}/${last}`;
-      link.innerHTML = `继续第 ${last} 章 <span aria-hidden="true">→</span>`;
+  function refreshResumeLinks() {
+    all('[data-resume]').forEach(link => {
+      const last = Number(get(`sw:last:${link.dataset.resume}`));
+      const available = link.dataset.available?.split(',').map(Number);
+      const valid = available ? available.includes(last) : Number.isInteger(last) && last >= Number(link.dataset.first) && last <= Number(link.dataset.last);
+      if (valid) {
+        const url = new URL(link.href);
+        url.pathname = `/b/${encodeURIComponent(link.dataset.resume)}/${last}`;
+        link.href = url.pathname + url.search + url.hash;
+        link.innerHTML = `继续第 ${last} 章 <span aria-hidden="true">→</span>`;
+      }
+    });
+  }
+  function refreshShelfHistory() {
+    const data = $('#shelf-index');
+    if (!data) return;
+    let books;
+    try { books = JSON.parse(data.textContent); } catch { return; }
+    const recent = books.map(book => ({ ...book, chapter: Number(get(`sw:last:${book.slug}`)), at: Number(get(`sw:lastAt:${book.slug}`)) || 0 }))
+      .filter(book => Number.isInteger(book.chapter) && book.chapter >= book.first && book.chapter <= book.last)
+      .sort((a, b) => b.at - a.at || a.slug.localeCompare(b.slug));
+    function historyCard(book) {
+      const link = document.createElement('a');
+      link.className = 'resume-card';
+      link.href = `/b/${encodeURIComponent(book.slug)}/${book.chapter}?from=${encodeURIComponent('/' + location.search + '#library')}`;
+      const mark = document.createElement('span');
+      mark.className = 'resume-mark';
+      mark.dataset.coverTone = book.tone;
+      mark.setAttribute('aria-hidden', 'true');
+      mark.textContent = book.title.slice(0, 1);
+      const copy = document.createElement('span');
+      copy.className = 'resume-copy';
+      const title = document.createElement('strong');
+      title.textContent = book.title;
+      const note = document.createElement('span');
+      note.textContent = `继续第 ${book.chapter} 章`;
+      copy.append(title, note);
+      const arrow = document.createElement('span');
+      arrow.className = 'resume-arrow';
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.textContent = '→';
+      link.append(mark, copy, arrow);
+      return link;
     }
-  });
+    const section = $('[data-continue]');
+    const list = $('[data-continue-list]');
+    const history = $('[data-history-list]');
+    list.replaceChildren(...recent.slice(0, 3).map(historyCard));
+    section.hidden = !recent.length;
+    history.replaceChildren(...recent.map(historyCard));
+    if (!recent.length) {
+      const empty = document.createElement('p');
+      empty.className = 'history-empty';
+      empty.textContent = '还没有阅读记录。翻开第一章，下一次就能从这里继续。';
+      history.append(empty);
+    }
+  }
+  all('[data-shelf-select]').forEach(select => select.addEventListener('change', () => select.form.requestSubmit()));
+  refreshResumeLinks();
+  refreshShelfHistory();
+  window.addEventListener('pageshow', () => { refreshResumeLinks(); refreshShelfHistory(); });
   if (slug && !chapter) {
     const last = Number(get(`sw:last:${slug}`));
     const rows = all('[data-chapter]');
@@ -98,6 +152,7 @@
     if (preview || restoring) return;
     set(posKey, ratio());
     set(`sw:last:${slug}`, chapter);
+    set(`sw:lastAt:${slug}`, Date.now());
   }
   function update() {
     const value = Math.round(ratio() * 100);
@@ -117,7 +172,11 @@
       window.scrollTo({ top: r * Math.max(1, document.documentElement.scrollHeight - innerHeight), behavior: 'instant' });
     }
     restoring = false;
-    if (!preview) { set(`sw:last:${slug}`, chapter); set(`sw:visited:${slug}:${chapter}`, 1); }
+    if (!preview) {
+      set(`sw:last:${slug}`, chapter);
+      set(`sw:lastAt:${slug}`, Date.now());
+      set(`sw:visited:${slug}:${chapter}`, 1);
+    }
     lastY = window.scrollY;
     update();
   }

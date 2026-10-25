@@ -96,3 +96,22 @@ test('inline lanterns retain a safe size and appearance when CSS is unavailable'
     assert.match(svg, /stroke="#[0-9a-f]+"/);
   }
 });
+
+
+test('catalogue search renders empty results and preserves query text safely', async () => {
+  const needle = '<img src=x onerror=alert(1)>';
+  const html = await (await fetch(`${origin}/?q=${encodeURIComponent(needle)}`)).text();
+  assert.ok(html.includes('找到 0 部作品'));
+  assert.ok(html.includes('清除筛选'));
+  assert.ok(!html.includes('<img src=x'));
+  assert.ok(html.includes('name="q" value="&lt;img'));
+});
+
+test('book details return to the selected catalogue filters, never an external origin', { skip: !slug }, async () => {
+  const from = '/?q=abc&sort=newest&page=2#library';
+  const html = await (await fetch(`${origin}/b/${slug}?from=${encodeURIComponent(from)}`)).text();
+  assert.ok(html.includes('href="/?q=abc&amp;sort=newest&amp;page=2#library"'));
+  const bad = await (await fetch(`${origin}/b/${slug}?from=${encodeURIComponent('//evil.test/')}`)).text();
+  assert.ok(!bad.includes('href="//evil.test/"'));
+  assert.ok(bad.includes('href="/#library"'));
+});
