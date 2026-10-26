@@ -1,5 +1,5 @@
 import { callLLM, callJson, spendSoFar } from './llm.ts';
-import { extractJson, countChars } from './json.ts';
+import { extractJson, safeJson, countChars } from './json.ts';
 import { mapLimit } from './util.ts';
 import { isMock } from './mock.ts';
 import { applyPatches, type Patch } from './patch.ts';
@@ -170,18 +170,19 @@ ${beat.pay?.length ? `需要在这一章回收的伏笔：${beat.pay.join('、')
     .filter(Boolean)
     .join('\n\n---\n\n');
 
-  const res = await callLLM({
-    role: 'planner',
-    system,
-    user,
-    json: true,
-    maxTokens: 8000,
-    label: 'plan',
-  });
-
-  const plan = extractJson<ChapterPlan>(res.text);
-  if (!plan.scenes?.length) throw new Error('规划阶段没有产出场景，输出异常');
-  return plan;
+  // 解析失败自动重试：一次坏 JSON 不该让整本书停下来
+  for (let i = 0; i < 2; i++) {
+    const plan = await callJson<ChapterPlan>({
+      role: 'planner',
+      system,
+      user,
+      json: true,
+      maxTokens: 12000,
+      label: 'plan',
+    });
+    if (plan.scenes?.length) return plan;
+  }
+  throw new Error('规划阶段连续两次没有产出场景');
 }
 
 /**
@@ -220,7 +221,7 @@ ${bookBriefing(book)}`,
     label: `plan-review:${n}`,
   });
 
-  const raw = extractJson<{ ok?: boolean; issues?: string[] }>(res.text);
+  const raw = safeJson<{ ok?: boolean; issues?: string[] }>(res.text, { ok: true, issues: [] });
   return { ok: raw.ok === true, issues: raw.issues ?? [] };
 }
 
@@ -750,7 +751,7 @@ async function arbitrate(
     label: `arbiter:${n}`,
   });
 
-  const raw = extractJson<{ publish?: boolean; reason?: string }>(res.text);
+  const raw = safeJson<{ publish?: boolean; reason?: string }>(res.text, { publish: false, reason: '仲裁输出无法解析' });
   return { publish: raw.publish === true, reason: raw.reason ?? '' };
 }
 
@@ -809,7 +810,7 @@ async function recordCanon(book: BookHandle, n: number, title: string, body: str
     label: `canon:${n}`,
   });
 
-  const raw = extractJson<Partial<CanonUpdate>>(res.text);
+  const raw = safeJson<Partial<CanonUpdate>>(res.text, {});
   return {
     summary: raw.summary ?? '',
     newFacts: raw.newFacts ?? [],

@@ -82,3 +82,18 @@ export function countChars(text: string): number {
   const hans = text.match(/[\u4e00-\u9fa5]/g)?.length ?? 0;
   return hans;
 }
+
+
+/**
+ * 解析失败就返回兜底值。
+ *
+ * 归档、复审、仲裁这些环节，解析失败不该让整章（甚至整本书）作废——
+ * 兜底之后流程能继续，人还能从日志里看到发生了什么。
+ */
+export function safeJson<T>(text: string, fallback: T): T {
+  try {
+    return extractJson<T>(text);
+  } catch {
+    return fallback;
+  }
+}

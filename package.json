@@ -26,9 +26,10 @@
     "write": "tsx src/cli.ts write",
     "outline": "tsx src/cli.ts outline",
     "backlog": "tsx src/cli.ts backlog",
-    "test": "node --import tsx --test src/serve/*.test.ts",
+    "test": "node --import tsx --test src/**/*.test.ts",
     "genesis": "tsx src/cli.ts genesis",
-    "newbook": "tsx src/cli.ts newbook"
+    "newbook": "tsx src/cli.ts newbook",
+    "stats": "tsx src/cli.ts stats"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

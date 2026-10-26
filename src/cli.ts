@@ -9,6 +9,7 @@ import { isMock } from './engine/mock.ts';
 import { expandOutline } from './engine/outline.ts';
 import { createBook } from './engine/genesis.ts';
 import { produceBook } from './engine/batch.ts';
+import { readLog, dayStats, formatStats } from './ops/stats.ts';
 import { readFileSync } from 'node:fs';
 import { enableCallLog } from './engine/util.ts';
 import { callLLM } from './engine/llm.ts';
@@ -192,6 +193,17 @@ async function cmdGenesis(): Promise<void> {
     chapters: Number(flag('chapters') ?? 14),
     author: flag('author') ?? '灯下人',
   });
+}
+
+/** 阅读数据：来客、漏斗、来源 */
+async function cmdStats(): Promise<void> {
+  const file = flag('file') ?? '/var/log/caddy/super-writer.log';
+  const hours = Number(flag('hours') ?? 24);
+  const lines = readLog(file);
+  const s = dayStats(lines, Date.now() - hours * 3600_000);
+  console.log(`\n  最近 ${hours} 小时\n`);
+  console.log(formatStats(s).replace(/^/gm, '  '));
+  console.log('');
 }
 
 /** 从一粒种子跑完一整本（无人值守） */
@@ -621,6 +633,7 @@ function help(): void {
     npm run recanon -- --n 1                    从定稿正文重算某章的事实与伏笔
     npm run audit   [--book slug]               全书漂移审计
     npm run night   [--book slug]               夜班：审计 + 写下一章（给 crontab 用）
+    npm run stats [--hours 24] [--file 路径]   看真实阅读数据
     npm run newbook -- --slug b3 --genre "悬疑" --chapters 14
     npm run genesis -- --slug b2 --seed "一句种子" --ending "一句结局" --chapters 14
     npm run backlog [--ahead 5]                 补缓冲：写到手上有 N 章待发
@@ -656,6 +669,8 @@ async function main(): Promise<void> {
       return cmdFirstScreen();
     case 'compare':
       return cmdCompare();
+    case 'stats':
+      return cmdStats();
     case 'newbook':
       return cmdNewbook();
     case 'genesis':

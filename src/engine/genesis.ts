@@ -102,6 +102,7 @@ export async function createBook(opts: GenesisOptions): Promise<void> {
     author,
     status: '连载中',
     synopsis: d.synopsis,
+    endingHint: opts.ending,
   };
 
   const characters: Character[] = d.characters.map((c) => ({

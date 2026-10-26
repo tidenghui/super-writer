@@ -10,7 +10,7 @@ import { extractJson } from './json.ts';
 import { createBook } from './genesis.ts';
 import { expandOutline } from './outline.ts';
 import { runChapter } from './chapter.ts';
-import { listChapterMetas, loadBook } from '../canon/store.ts';
+import { listChapterMetas, loadBook, loadBookInfo } from '../canon/store.ts';
 
 export interface ProduceOptions {
   slug: string;
@@ -49,23 +49,34 @@ ${avoid.length ? `下面这些已经用过了，不要重复它们的设定：\n
 
 /** 跑完一本：出题 → 全书章纲 → 逐章写，失败的章改章纲再写 */
 export async function produceBook(opts: ProduceOptions): Promise<{ ok: boolean; chapters: number; failedAt?: number }> {
-  const { seed, ending } = await inventSeed(opts.genre, opts.avoid ?? []);
-  console.log(`\n  【${opts.slug}】种子：${seed}`);
+  // 断点续写：已经写过的书，接着往下写，不重新出题
+  const existing = listChapterMetas(opts.slug).filter((m) => m.status === 'accepted');
+  const startFrom = existing.length ? existing[existing.length - 1]!.n + 1 : 1;
+  const isResume = existing.length > 0;
 
-  await createBook({
-    slug: opts.slug,
-    seed,
-    ending,
-    chapters: opts.chapters,
-    author: opts.author ?? '灯下人',
-  });
+  let ending = '';
+  if (isResume) {
+    ending = loadBookInfo(opts.slug).endingHint ?? '';
+    console.log(`\n  【${opts.slug}】续写：已有 ${existing.length} 章，从第 ${startFrom} 章接着来`);
+  } else {
+    const seed = await inventSeed(opts.genre, opts.avoid ?? []);
+    ending = seed.ending;
+    console.log(`\n  【${opts.slug}】种子：${seed.seed}`);
+    await createBook({
+      slug: opts.slug,
+      seed: seed.seed,
+      ending: seed.ending,
+      chapters: opts.chapters,
+      author: opts.author ?? '灯下人',
+    });
+  }
 
   // 整本先排章纲——这是第二部首轮通过率从 47% 涨到 86% 的关键
-  await expandOutline(loadBook(opts.slug), 1, opts.chapters, ending);
+  await expandOutline(loadBook(opts.slug), startFrom, opts.chapters, ending);
 
-  for (let n = 1; n <= opts.chapters; n++) {
+  for (let n = startFrom; n <= opts.chapters; n++) {
     let ok = false;
-    for (let attempt = 1; attempt <= 4; attempt++) {
+    for (let attempt = 1; attempt <= 6; attempt++) {
       // 连续两次不过，回头改这一章的章纲再写
       if (attempt === 3) {
         await expandOutline(loadBook(opts.slug), n, n, ending);

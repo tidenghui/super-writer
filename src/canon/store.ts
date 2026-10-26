@@ -469,6 +469,8 @@ export interface BookInfo {
   author?: string;
   status?: string;
   synopsis?: string;
+  /** 结局方向：续写时要用它继续约束章纲，不能丢 */
+  endingHint?: string;
 }
 
 export function saveBookInfo(slug: string, info: BookInfo): void {
