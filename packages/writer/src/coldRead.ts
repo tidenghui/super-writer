@@ -1,8 +1,8 @@
 import { callLLM } from './llm.ts';
 import { extractJson } from './json.ts';
 import { mapLimit } from './util.ts';
-import { listChapterMetas, summaryIndex } from '../canon/store.ts';
-import type { BookHandle } from '../canon/store.ts';
+import { listChapterMetas, summaryIndex } from '../../contract/src/index.ts';
+import type { BookHandle } from '../../contract/src/index.ts';
 
 export interface ColdReadResult {
   persona: string;

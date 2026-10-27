@@ -4,7 +4,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { listBooks, listChapterMetas } from '../canon/store.ts';
+import { listBooks, listChapterMetas } from '../../contract/src/index.ts';
 import { publishedChapters } from './publication.ts';
 
 // Uses existing local books read-only; no model calls or authored content fixtures.
@@ -14,7 +14,7 @@ const token = randomBytes(24).toString('hex');
 const slug = listBooks()[0];
 const chapters = slug ? publishedChapters(listChapterMetas(slug)) : [];
 before(async () => {
-  child = spawn(process.execPath, ['--import', 'tsx', 'src/serve/server.ts'], {
+  child = spawn(process.execPath, ['--import', 'tsx', 'packages/reader/src/server.ts'], {
     env: { ...process.env, PORT: '0', HOST: '127.0.0.1', SW_PREVIEW_TOKEN: token },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

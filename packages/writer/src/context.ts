@@ -12,7 +12,7 @@ import {
   type ChapterBeat,
   type Character,
   type Promise_,
-} from '../canon/store.ts';
+} from '../../contract/src/index.ts';
 
 /** 给模型看的「这本书是什么」——每次调用都带上，防止跑偏 */
 export function bookBriefing(book: BookHandle): string {

@@ -13,7 +13,7 @@ Environment=NODE_ENV=production
 Environment=PORT=8787
 Environment=HOST=127.0.0.1
 # 对外地址写进 .env.local 的 SITE_URL，这里不重复
-ExecStart=/opt/super-writer/node_modules/.bin/tsx src/serve/server.ts
+ExecStart=/opt/super-writer/node_modules/.bin/tsx packages/reader/src/server.ts
 Restart=always
 RestartSec=3
 KillSignal=SIGTERM

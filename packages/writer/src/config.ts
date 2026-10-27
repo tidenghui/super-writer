@@ -2,8 +2,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export { ROOT } from '../../packages/contract/src/index.ts';
-export { bookDir } from '../../packages/contract/src/index.ts';
+export { ROOT } from '../../contract/src/index.ts';
+export { bookDir } from '../../contract/src/index.ts';
 
 const ROOT_INTERNAL = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 

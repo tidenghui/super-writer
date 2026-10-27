@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { loadEnv, ROOT, runsDir, resolveRole, checkCriticDiversity } from './engine/config.ts';
-import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapter, polishChapter, runMany, buildBacklog } from './engine/chapter.ts';
-import { runAllCritics } from './engine/critics.ts';
-import { runColdReaders, firstScreenAll, comparePair } from './engine/coldRead.ts';
-import { isMock } from './engine/mock.ts';
-import { expandOutline } from './engine/outline.ts';
-import { createBook } from './engine/genesis.ts';
-import { produceBook } from './engine/batch.ts';
-import { readLog, dayStats, formatStats } from './ops/stats.ts';
+import { loadEnv, ROOT, runsDir, resolveRole, checkCriticDiversity } from '../packages/writer/src/config.ts';
+import { runChapter, runWithCandidates, recanonChapter, fixChapter, rereadChapter, polishChapter, runMany, buildBacklog } from '../packages/writer/src/chapter.ts';
+import { runAllCritics } from '../packages/writer/src/critics.ts';
+import { runColdReaders, firstScreenAll, comparePair } from '../packages/writer/src/coldRead.ts';
+import { isMock } from '../packages/writer/src/mock.ts';
+import { expandOutline } from '../packages/writer/src/outline.ts';
+import { createBook } from '../packages/writer/src/genesis.ts';
+import { produceBook } from '../packages/writer/src/batch.ts';
+import { readLog, dayStats, formatStats } from '../packages/reader/src/ops/stats.ts';
 import { readFileSync } from 'node:fs';
-import { enableCallLog } from './engine/util.ts';
-import { callLLM } from './engine/llm.ts';
-import { extractJson } from './engine/json.ts';
+import { enableCallLog } from '../packages/writer/src/util.ts';
+import { callLLM } from '../packages/writer/src/llm.ts';
+import { extractJson } from '../packages/writer/src/json.ts';
 import {
   listBooks,
   listChapterMetas,

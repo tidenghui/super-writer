@@ -13,9 +13,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { callLLM } from './llm.ts';
 import { extractJson } from './json.ts';
-import { saveBookInfo, saveCharacters, saveOutline, savePromises } from '../canon/store.ts';
+import { saveBookInfo, saveCharacters, saveOutline, savePromises } from '../../contract/src/index.ts';
 import { bookDir } from './config.ts';
-import type { BookInfo, Character, ChapterBeat, Outline } from '../canon/store.ts';
+import type { BookInfo, Character, ChapterBeat, Outline } from '../../contract/src/index.ts';
 
 export interface GenesisOptions {
   slug: string;

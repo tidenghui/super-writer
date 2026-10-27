@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { publishedChapters } from './publication.ts';
-import type { ChapterMeta } from '../canon/store.ts';
+import type { ChapterMeta } from '../../contract/src/index.ts';
 
 const chapter = (n: number, patch: Partial<ChapterMeta> = {}): ChapterMeta => ({
   n, title: `Chapter ${n}`, status: 'accepted', wordCount: 0, summary: '',

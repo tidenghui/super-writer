@@ -51,7 +51,7 @@ import {
   type ChapterBeat,
   type Promise_,
   type Fact,
-} from '../canon/store.ts';
+} from '../../contract/src/index.ts';
 
 // ─────────────────────────────────────────────────────────────
 // 类型

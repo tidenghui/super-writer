@@ -1,4 +1,4 @@
-import type { ChapterMeta } from '../canon/store.ts';
+import type { ChapterMeta } from '../../contract/src/index.ts';
 
 /** All public entry points share the same contiguous, published prefix. */
 export function publishedChapters(metas: ChapterMeta[], now = Date.now()): ChapterMeta[] {

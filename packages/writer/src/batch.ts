@@ -10,7 +10,7 @@ import { extractJson } from './json.ts';
 import { createBook } from './genesis.ts';
 import { expandOutline } from './outline.ts';
 import { runChapter } from './chapter.ts';
-import { listChapterMetas, loadBook, loadBookInfo } from '../canon/store.ts';
+import { listChapterMetas, loadBook, loadBookInfo } from '../../contract/src/index.ts';
 
 export interface ProduceOptions {
   slug: string;

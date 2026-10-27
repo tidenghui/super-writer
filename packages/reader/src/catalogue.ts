@@ -1,4 +1,4 @@
-import type { BookInfo, ChapterMeta } from '../canon/store.ts';
+import type { BookInfo, ChapterMeta } from '../../contract/src/index.ts';
 
 export interface ShelfBook {
   slug: string;

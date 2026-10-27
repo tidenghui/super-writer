@@ -4,9 +4,9 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listBooks, loadBookInfo, listChapterMetas, loadChapter, type ChapterMeta } from '../canon/store.ts';
+import { listBooks, loadBookInfo, listChapterMetas, loadChapter, type ChapterMeta } from '../../contract/src/index.ts';
 import { publishedChapters } from './publication.ts';
-import { bookDir, loadEnv } from '../engine/config.ts';
+import { bookDir, loadEnv } from '../../writer/src/config.ts';
 import { bookHref, safeShelfReturn, shelfQuery, summarizeBook } from './catalogue.ts';
 import { bookCover, renderCatalogue } from './catalogueView.ts';
 

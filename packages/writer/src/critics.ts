@@ -1,7 +1,7 @@
 import { callLLM } from './llm.ts';
 import { extractJson } from './json.ts';
 import { mapLimit } from './util.ts';
-import { loadChapter, type BookHandle } from '../canon/store.ts';
+import { loadChapter, type BookHandle } from '../../contract/src/index.ts';
 import { bookBriefing, factsBrief, premiseOnly, promiseBrief, styleRules } from './context.ts';
 
 export type Severity = 'blocker' | 'major' | 'minor';

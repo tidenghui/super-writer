@@ -14,7 +14,7 @@
  */
 import { callLLM } from './llm.ts';
 import { extractJson } from './json.ts';
-import { saveOutline, loadRules } from '../canon/store.ts';
+import { saveOutline, loadRules } from '../../contract/src/index.ts';
 import { proximityViolations } from './lint.ts';
 import {
   bookBriefing,
@@ -31,7 +31,7 @@ import {
   summaryIndex,
   type BookHandle,
   type ChapterBeat,
-} from '../canon/store.ts';
+} from '../../contract/src/index.ts';
 
 export interface OutlineReport {
   n: number;
