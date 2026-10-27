@@ -160,7 +160,45 @@ export async function createBook(opts: GenesisOptions): Promise<void> {
     label: 'genesis',
   });
 
-  const d = extractJson<GenesisDraft>(res.text);
+  let d = extractJson<GenesisDraft>(res.text);
+
+  // 模型偶尔会漏字段。缺了就直接崩在 .map 上，报错还看不出是缺字段。
+  // 这里校验一遍，不合格就再要一次。
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const bad: string[] = [];
+    if (!Array.isArray(d.chapters) || d.chapters.length < 3) bad.push('chapters');
+    if (!Array.isArray(d.acts) || d.acts.length < 1) bad.push('acts');
+    if (!Array.isArray(d.characters) || d.characters.length < 2) bad.push('characters');
+    if (!d.premise || !d.world || !d.style) bad.push('premise/world/style');
+    if (!bad.length) break;
+
+    console.log(`  ⚠ 出题结果缺字段（${bad.join('、')}），重来一次`);
+    const retry = await callJson<GenesisDraft>({
+      role: 'showrunner',
+      system: `你是这本书的策划。上一版漏了必需字段，这次必须齐全。`,
+      user: [
+        `## 种子`,
+        opts.seed,
+        `## 结局方向`,
+        opts.ending,
+        `## 规模`,
+        `中篇，${chapters} 章。`,
+        `## 必须包含的字段`,
+        `title / tagline / genre / synopsis / premise / world / style / characters（≥2 个）/ acts（≥1 卷）/ chapters（正好 ${chapters} 章，n 从 1 到 ${chapters}）`,
+        `## 输出`,
+        `只输出 JSON：`,
+        SCHEMA,
+      ].join('\n\n---\n\n'),
+      json: true,
+      maxTokens: 16000,
+      label: 'genesis:retry',
+    });
+    d = retry;
+  }
+
+  if (!Array.isArray(d.chapters) || !d.chapters.length) {
+    throw new Error('出题连续两次没有产出章节，放弃这本书');
+  }
 
   const info: BookInfo = {
     title: d.title,
