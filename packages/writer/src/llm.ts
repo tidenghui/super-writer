@@ -31,6 +31,18 @@ const ledger = {
   byLabel: new Map<string, number>(),
 };
 
+/**
+ * 把花销清零，进入新的一章。
+ *
+ * 这个账本原来是进程级的，但护栏的提示写的是「本章已花费」——
+ * 于是第 11 章会被前 10 章的钱掐死。预算本来就该按章算。
+ */
+export function resetSpend(): void {
+  ledger.totalCny = 0;
+  ledger.calls = 0;
+  ledger.byLabel.clear();
+}
+
 export function spendSoFar(): { totalCny: number; calls: number } {
   return { totalCny: ledger.totalCny, calls: ledger.calls };
 }

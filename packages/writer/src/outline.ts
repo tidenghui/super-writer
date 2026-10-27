@@ -12,7 +12,7 @@
  *
  * 人只负责两件事：定卷纲，和验收成品。
  */
-import { callLLM, callJson } from './llm.ts';
+import { callLLM, callJson, resetSpend } from './llm.ts';
 import { extractJson } from './json.ts';
 import { saveOutline, loadRules, currentLedger } from '../../contract/src/index.ts';
 import { proximityViolations } from './lint.ts';
@@ -279,6 +279,7 @@ export async function expandOutline(
   const rules = loadRules(book.slug);
 
   for (let n = from; n <= to; n++) {
+    resetSpend(); // 每章重新计预算
     const ch = loadChapter(book.slug, n);
     if (ch?.meta.status === 'accepted') {
       console.log(`  第 ${n} 章已定稿，跳过`);

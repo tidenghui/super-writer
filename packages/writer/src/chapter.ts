@@ -1,4 +1,4 @@
-import { callLLM, callJson, spendSoFar } from './llm.ts';
+import { callLLM, callJson, spendSoFar, resetSpend } from './llm.ts';
 import { extractJson, safeJson, countChars } from './json.ts';
 import { mapLimit } from './util.ts';
 import { isMock } from './mock.ts';
@@ -866,6 +866,7 @@ export function profileFor(n: number): ChapterProfile {
 }
 
 export async function runChapter(opts: RunOptions): Promise<ChapterResult> {
+  resetSpend(); // 预算是按章算的
   const book = loadBook(opts.bookSlug);
   const n = opts.n;
   const profile = profileFor(n);
