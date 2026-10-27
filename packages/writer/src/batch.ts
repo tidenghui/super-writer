@@ -47,6 +47,24 @@ ${avoid.length ? `下面这些已经用过了，不要重复它们的设定：\n
   return { seed: d.seed, ending: d.ending };
 }
 
+/**
+ * 卡住的时候换更贵的模型。
+ *
+ * 反复不过往往不是次数不够，是这一章超出便宜模型的判断力——
+ * 数量账算不平、结构绕不过来。这时候继续用同一个模型重试，只是把同一个错误重复十二遍。
+ */
+const STRONG_MODELS: Record<string, { provider: string; model: string }> = {
+  showrunner: { provider: 'openai', model: 'gpt-6.1-sol' },
+  planner: { provider: 'openai', model: 'gpt-6.1-sol' },
+  writer: { provider: 'openai', model: 'gpt-6.1-sol' },
+  reviser: { provider: 'openai', model: 'gpt-6.1-sol' },
+};
+
+function setModelOverride(map: Record<string, { provider: string; model: string }> | null): void {
+  if (!map) delete process.env.SW_ROLE_OVERRIDE;
+  else process.env.SW_ROLE_OVERRIDE = JSON.stringify(map);
+}
+
 /** 跑完一本：出题 → 全书章纲 → 逐章写，失败的章改章纲再写 */
 export async function produceBook(opts: ProduceOptions): Promise<{ ok: boolean; chapters: number; failedAt?: number }> {
   // 断点续写：已经写过的书，接着往下写，不重新出题

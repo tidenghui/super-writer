@@ -14,7 +14,7 @@
  */
 import { callLLM, callJson } from './llm.ts';
 import { extractJson } from './json.ts';
-import { saveOutline, loadRules } from '../../contract/src/index.ts';
+import { saveOutline, loadRules, currentLedger } from '../../contract/src/index.ts';
 import { proximityViolations } from './lint.ts';
 import {
   bookBriefing,
@@ -107,6 +107,18 @@ ${styleRules(book)}`,
       `已写完的章节摘要：\n${summaryIndex(metas, n) || '（还没有）'}`,
       prevCh ? `## 上一章的结尾原文（这一章要接住它的情绪和悬念）\n……${prevCh.body.trim().slice(-400)}` : '',
       `## 已经写进正文、不许违反的事实\n${establishedFacts(book, n) || '（无）'}`,
+      (() => {
+        const ledger = currentLedger(book.slug, n);
+        if (!ledger.length) return '';
+        return [
+          `## 账本：到第 ${n - 1} 章结束时的数量`,
+          ledger.map((e) => `- ${e.key}：${e.value}${e.unit ?? ''}（第${e.fromChapter}章末）`).join('\n'),
+          '',
+          '**这一章如果涉及这些数，必须从上面的值开始算。**',
+          '加减要算得平：给出「收了多少 / 用了多少 / 还剩多少」，三个数自洽。',
+          '算不平的情节不要写——把它改成不需要动账的写法，或者换一个场景。',
+        ].join('\n');
+      })(),
       `## 还没还的债\n${open.map((p) => `- [${p.id}] ${p.text}（第${p.dueBy}章前）`).join('\n') || '（无）'}`,
       `## 可出场的角色（只能用这些 id，不许新造人）\n${castRoster(book)}`,
       `## 卷的位置\n${book.bible.outline.acts.map((a) => `- ${a.name}（第${a.from}–${a.to}章）${a.gist}`).join('\n')}`,
@@ -236,6 +248,7 @@ ${bookBriefing(book)}`,
       [
         `物件/地点：${loadEntities(book.slug).filter((e) => e.fromChapter < n).map((e) => e.name).join('、')}`,
         `已写事实：${loadFacts(book.slug).filter((f) => f.chapter < n).slice(-40).map((f) => `${f.subject}：${f.fact}`).join('；')}`,
+        `账本：${currentLedger(book.slug, n).map((e) => `${e.key}=${e.value}${e.unit ?? ''}`).join('；') || '（无）'}`,
       ].join('\n'),
       `## 待审章纲（第 ${n} 章）`,
       `${beat.title}\n${beat.beats.map((b, i) => `${i + 1}. ${b}`).join('\n')}\n钩子：${beat.hook}`,
