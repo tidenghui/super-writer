@@ -76,9 +76,10 @@ export async function produceBook(opts: ProduceOptions): Promise<{ ok: boolean; 
 
   for (let n = startFrom; n <= opts.chapters; n++) {
     let ok = false;
-    for (let attempt = 1; attempt <= 6; attempt++) {
-      // 连续两次不过，回头改这一章的章纲再写
-      if (attempt === 3) {
+    for (let attempt = 1; attempt <= 12; attempt++) {
+      // 每试三次就回头改一次这一章的章纲：
+      // 卡死的章通常不是"这次没写好"，是这一章的情节本身在书里不成立。
+      if (attempt > 1 && attempt % 3 === 0) {
         await expandOutline(loadBook(opts.slug), n, n, ending);
       }
       const r = await runChapter({ bookSlug: opts.slug, n });
