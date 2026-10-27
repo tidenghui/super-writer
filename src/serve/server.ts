@@ -16,6 +16,9 @@ loadEnv();
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CSS = readFileSync(resolve(HERE, 'theme.css'), 'utf8');
+// 读者群的二维码。换图后哈希会变，读者不会再看到旧缓存。
+const GROUP_QR = readFileSync(resolve(HERE, 'assets', 'group-qr.webp'));
+const GROUP_QR_URL = `/static/group-qr.webp?v=${createHash('sha256').update(GROUP_QR).digest('hex').slice(0, 16)}`;
 const CLIENT = readFileSync(resolve(HERE, 'reader.js'), 'utf8');
 // Keep URLs in sync with their contents: a cached pre-deployment stylesheet must
 // never be reused by new HTML, even behind Caddy's one-day static cache.
@@ -113,7 +116,7 @@ function readAction(slug: string, chapters: ChapterMeta[], preview = false, retu
 }
 function libraryPage(theme: string | null, params: URLSearchParams): string {
   const books = listBooks().map(slug => summarizeBook(slug, loadBookInfo(slug), live(slug)));
-  return layout(SITE_NAME, `${header(undefined, true)}<main id="main" class="wide catalogue-page">${renderCatalogue(books, shelfQuery(params), SITE_NAME, SITE_TAGLINE)}</main>`, theme, undefined, SITE_DESCRIPTION, '/');
+  return layout(SITE_NAME, `${header(undefined, true)}<main id="main" class="wide catalogue-page">${renderCatalogue(books, shelfQuery(params), SITE_NAME, SITE_TAGLINE, GROUP_QR_URL)}</main>`, theme, undefined, SITE_DESCRIPTION, '/');
 }
 function chapterRows(slug: string, chapters: ChapterMeta[], current?: number, preview = false, returnTo = ''): string {
   return chapters.map((c, i) => `<a class="toc-row${c.n === current ? ' current' : ''}" data-chapter="${c.n}" href="${esc(chapterUrl(slug, c.n, preview, returnTo))}"${c.n === current ? ' aria-current="page"' : ''}><span class="toc-no">${String(c.n).padStart(2, '0')}</span><span class="toc-title">${esc(c.title)}</span><span class="chapter-label">${c.n === current ? '正在读' : c.status !== 'accepted' ? '草稿' : i === chapters.length - 1 ? '最新' : ''}</span><span class="toc-words">${words(c.wordCount)}</span></a>`).join('');
@@ -171,7 +174,7 @@ const server = createServer((req, res) => {
   const url = new URL(rawUrl, 'http://localhost'), path = url.pathname;
   const wantsPreview = url.searchParams.get('draft') === '1';
   const theme = url.searchParams.get('theme');
-  const send = (status: number, body: string, type = 'text/html; charset=utf-8', cache?: string) => {
+  const send = (status: number, body: string | Buffer, type = 'text/html; charset=utf-8', cache?: string) => {
     res.writeHead(status, { 'content-type': type, 'cache-control': wantsPreview ? 'private, no-store' : cache ?? (status === 200 ? 'public, max-age=120' : 'no-store'), 'x-content-type-options': 'nosniff', ...(wantsPreview ? { 'x-robots-tag': 'noindex, nofollow' } : {}) });
     res.end(body);
   };
@@ -180,6 +183,7 @@ const server = createServer((req, res) => {
     if (wantsPreview && !authorizedPreview(req.headers.authorization)) return error(403, '此页仅供内部预览', '请返回书架，阅读已发布的章节。');
     if (path === '/static/theme.css') return send(200, CSS, 'text/css; charset=utf-8', 'public, max-age=60');
     if (path === '/static/reader.js') return send(200, CLIENT, 'text/javascript; charset=utf-8', 'public, max-age=60');
+    if (path === '/static/group-qr.webp') return send(200, GROUP_QR, 'image/webp', 'public, max-age=604800');
     if (path === '/static/lantern.svg') return send(200, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 40"><rect width="32" height="40" rx="8" fill="#f5f1e8"/><g fill="none" stroke="#ae4635" stroke-width="2"><path d="M12 3h8M16 3v4M10 32h12M16 33v5"/><rect x="6" y="8" width="20" height="23" rx="8"/><path d="M16 9c-7 7-7 14 0 21M16 9c7 7 7 14 0 21"/></g></svg>`, 'image/svg+xml');
     if (path === '/healthz') return send(200, JSON.stringify({ ok: true, books: listBooks().length, chapters: listBooks().reduce((n, b) => n + live(b).length, 0) }), 'application/json; charset=utf-8', 'no-store');
     if (path === '/robots.txt') return send(200, `User-agent: *\nAllow: /\nDisallow: /*?draft=1\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
