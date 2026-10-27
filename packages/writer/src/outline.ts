@@ -294,12 +294,20 @@ export async function expandOutline(
     let fixes: string[] = [];
     // 章纲也要跑和正文一样的机械检查：
     // 上一版把「两短一长」写进了柳青梧的节拍，正文忠实照抄，一路带进稿子。
-    const mechanical = (b: ChapterBeat) => [
-      ...proximityViolations((b.beats ?? []).join('\n\n'), rules, n).map((v) => v.rule),
-      ...missingRequirements(book, n, b).map(
-        (r) => `这一章依赖「${r}」，但书里到第 ${n - 1} 章为止从没出现过。要么换成已有的，要么这个情节不成立。`,
-      ),
-    ];
+    // 机械检查只留「串味」这一条——它是逐字匹配，判得准。
+    //
+    // 前置条件的字符串回查误报太多：写着「丹田残魂已开口」，书里写的是
+    // 「周玄霆在丹田里开口」，措辞一换就查不到，于是章纲被反复重写、越改越偏。
+    // 语义上到底有没有铺垫，交给复核模型判断（它读得懂同义）。
+    const mechanical = (b: ChapterBeat) => {
+      const suspects = missingRequirements(book, n, b);
+      if (suspects.length) {
+        console.log(
+          `  \x1b[2m·\x1b[0m 第 ${n} 章可能缺少铺垫（仅供参考）：${suspects.join('、')}`,
+        );
+      }
+      return proximityViolations((b.beats ?? []).join('\n\n'), rules, n).map((v) => v.rule);
+    };
 
     let beat = await draftBeat(book, n, day, fixes, ending);
     beat.n = n;
