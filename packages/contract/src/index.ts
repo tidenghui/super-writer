@@ -290,6 +290,10 @@ export function dropGeneratedPromises(promises: Promise_[], chapter: number): Pr
   return promises.filter((p) => !p.id.startsWith(prefix));
 }
 
+export function saveStyle(slug: string, style: string): void {
+  writeAtomic(resolve(bookDir(slug), 'bible', 'style.md'), style.trim() + '\n');
+}
+
 export function saveOutline(slug: string, outline: Outline): void {
   writeAtomic(resolve(bookDir(slug), 'bible', 'outline.json'), JSON.stringify(outline, null, 2) + '\n');
 }

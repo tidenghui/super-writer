@@ -11,9 +11,9 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { callLLM } from './llm.ts';
+import { callLLM, callJson } from './llm.ts';
 import { extractJson } from './json.ts';
-import { saveBookInfo, saveCharacters, saveOutline, savePromises } from '../../contract/src/index.ts';
+import { saveBookInfo, saveCharacters, saveOutline, savePromises, saveStyle, loadBook } from '../../contract/src/index.ts';
 import { bookDir } from './config.ts';
 import type { BookInfo, Character, ChapterBeat, Outline } from '../../contract/src/index.ts';
 
@@ -44,6 +44,73 @@ interface GenesisDraft {
     day?: number;
     plant?: string[];
   }>;
+}
+
+/**
+ * 出题自检：文风规范不能和故事本身打架。
+ *
+ * b07 就是栽在这里——style.md 写着「禁止老祖在前期说话」，
+ * 而整个故事线都靠老祖说话推进。写手照章纲写，批评家再驳回，
+ * 磨了十几轮也写不出来，因为这本书的设定自己禁止自己。
+ */
+async function reconcileStyle(slug: string): Promise<void> {
+  const book = loadBook(slug);
+  const outlineBrief = book.bible.outline.chapters
+    .map((c) => `第${c.n}章《${c.title}》：${c.purpose ?? ''}`)
+    .join('\n');
+
+  const found = await callJson<{ conflicts?: string[] }>({
+    role: 'outlineReview',
+    system: `你是这本书的责任编辑。你只做一件事：把文风规范里的**禁令**和故事大纲对一遍，找出打架的地方。
+
+打架的定义：规范里写了「禁止 / 不许 / 前期不」，而大纲的章节设计必然需要它。
+
+没有冲突就返回空数组。`,
+    user: [
+      `## 文风规范`,
+      book.bible.style,
+      `## 章节大纲`,
+      outlineBrief,
+      `## 输出`,
+      `只输出 JSON：{"conflicts":["第几条禁令 与 第几章 冲突，一句话说清"]}`,
+    ].join('\n\n---\n\n'),
+    json: true,
+    maxTokens: 2000,
+    label: 'genesis:conflict',
+  });
+
+  const conflicts = (found.conflicts ?? []).filter(Boolean);
+  if (!conflicts.length) return;
+
+  console.log(`  ⚠ 文风规范与大纲冲突 ${conflicts.length} 处，正在修规范：`);
+  for (const c of conflicts) console.log(`    · ${c}`);
+
+  const fixed = await callJson<{ style?: string }>({
+    role: 'showrunner',
+    system: `你要修的是这本书的**文风规范**，不是故事。
+
+原则：故事是骨架，规范是皮肤。规范不该禁止故事必须发生的事。
+把冲突的禁令改成有分寸的限制——保留约束的意图，去掉不可能执行的部分。
+
+例如「禁止老祖前期说话」与「第三到八章靠老祖对话推进」冲突时，
+改成「老祖前期只给短句和暗示，不解释来历、不谈条件；中后期才展开对话」。`,
+    user: [
+      `## 现有文风规范`,
+      book.bible.style,
+      `## 冲突清单`,
+      conflicts.map((c) => `- ${c}`).join('\n'),
+      `## 输出`,
+      `只输出 JSON：{"style":"修改后的完整文风规范（Markdown）"}`,
+    ].join('\n\n---\n\n'),
+    json: true,
+    maxTokens: 6000,
+    label: 'genesis:fix-style',
+  });
+
+  if (fixed.style && fixed.style.trim().length > 100) {
+    saveStyle(slug, fixed.style);
+    console.log('  ✓ 文风规范已修正');
+  }
 }
 
 const SCHEMA = `{
@@ -141,6 +208,8 @@ export async function createBook(opts: GenesisOptions): Promise<void> {
   writeFileSync(resolve(dir, 'bible', 'world.md'), d.world.trim() + '\n');
   writeFileSync(resolve(dir, 'bible', 'style.md'), d.style.trim() + '\n');
   writeFileSync(resolve(dir, 'bible', 'rules.json'), '[]\n');
+
+  await reconcileStyle(opts.slug);
 
   console.log(`\n  《${d.title}》${d.tagline}`);
   console.log(`  ${d.genre}｜${characters.length} 个角色｜${outline.acts.length} 卷｜${outline.chapters.length} 章`);
