@@ -6,9 +6,13 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listBooks, loadBookInfo, listChapterMetas, loadChapter, type ChapterMeta } from '../canon/store.ts';
 import { publishedChapters } from './publication.ts';
-import { bookDir } from '../engine/config.ts';
+import { bookDir, loadEnv } from '../engine/config.ts';
 import { bookHref, safeShelfReturn, shelfQuery, summarizeBook } from './catalogue.ts';
 import { bookCover, renderCatalogue } from './catalogueView.ts';
+
+// 必须在读任何 SITE_* 常量之前加载 .env.local，
+// 否则 SITE_URL 之类会静默回落到默认值。
+loadEnv();
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CSS = readFileSync(resolve(HERE, 'theme.css'), 'utf8');
@@ -24,6 +28,8 @@ const HOST = process.env.HOST ?? '127.0.0.1';
 const SITE_URL = (process.env.SITE_URL ?? `http://127.0.0.1:${PORT}`).replace(/\/$/, '');
 const SITE_NAME = process.env.SITE_NAME ?? '提灯会';
 const SITE_TAGLINE = process.env.SITE_TAGLINE ?? '每晚，多一盏灯。';
+const SITE_DESCRIPTION =
+  process.env.SITE_DESCRIPTION ?? '免费、无广告、每本都完本的中文小说。手机直接读，不用注册。';
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -58,9 +64,44 @@ function settings(): string {
   <fieldset><legend>字体</legend><div class="choices"><button data-font="serif">宋体</button><button data-font="sans">黑体</button></div></fieldset>
   <p class="panel-note">偏好与阅读进度保存在当前浏览器。</p></dialog>`;
 }
-function layout(title: string, body: string, theme: string | null, slug?: string): string {
+/**
+ * 链接被分享出去时的样子。
+ *
+ * 没有这几个标签，微信 / 即刻 / 豆瓣里粘贴链接就只有一条光秃秃的网址，
+ * 点击率差一大截。描述优先用书自己的简介，没有就用站点的。
+ */
+function socialMeta(title: string, description: string, urlPath: string): string {
+  const t = title === SITE_NAME ? title : `${title} · ${SITE_NAME}`;
+  const d = description
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[#*_`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+  return [
+    `<meta name="description" content="${esc(d)}">`,
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:site_name" content="${esc(SITE_NAME)}">`,
+    `<meta property="og:title" content="${esc(t)}">`,
+    `<meta property="og:description" content="${esc(d)}">`,
+    `<meta property="og:url" content="${esc(`${SITE_URL}${urlPath}`)}">`,
+    `<meta name="twitter:card" content="summary">`,
+    `<meta name="twitter:title" content="${esc(t)}">`,
+    `<meta name="twitter:description" content="${esc(d)}">`,
+    `<link rel="canonical" href="${esc(`${SITE_URL}${urlPath}`)}">`,
+  ].join('');
+}
+
+function layout(
+  title: string,
+  body: string,
+  theme: string | null,
+  slug?: string,
+  description = SITE_DESCRIPTION,
+  urlPath = '/',
+): string {
   const validTheme = ['light', 'dark', 'sepia'].includes(theme ?? '') ? theme : null;
-  return `<!doctype html><html lang="zh-CN"${validTheme ? ` data-theme="${validTheme}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light dark"><title>${esc(title === SITE_NAME ? title : `${title} · ${SITE_NAME}`)}</title><link rel="stylesheet" href="${CSS_URL}"><link rel="alternate" type="application/rss+xml" title="RSS 订阅" href="${slug ? feedUrl(slug) : '/feed.xml'}"><link rel="icon" href="/static/lantern.svg" type="image/svg+xml">
+  return `<!doctype html><html lang="zh-CN"${validTheme ? ` data-theme="${validTheme}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light dark"><title>${esc(title === SITE_NAME ? title : `${title} · ${SITE_NAME}`)}</title>${socialMeta(title, description, urlPath)}<link rel="stylesheet" href="${CSS_URL}"><link rel="alternate" type="application/rss+xml" title="RSS 订阅" href="${slug ? feedUrl(slug) : '/feed.xml'}"><link rel="icon" href="/static/lantern.svg" type="image/svg+xml">
   <script>(function(){try{var r=document.documentElement,t=localStorage.getItem('sw:theme');if(!r.dataset.theme&&['light','dark','sepia'].includes(t))r.dataset.theme=t;var f=parseInt(localStorage.getItem('sw:fs'));if(f>=16&&f<=28)r.style.setProperty('--fs',f+'px');var l=localStorage.getItem('sw:leading');if(['1.7','1.95','2.25'].includes(l))r.style.setProperty('--leading',l);if(localStorage.getItem('sw:font')==='sans')r.dataset.font='sans';}catch(e){}})();</script><script src="${CLIENT_URL}" defer></script></head><body><a class="skip-link" href="#main">跳到主要内容</a>${body}<footer class="site-footer"><a class="brand" href="/">${lantern}${esc(SITE_NAME)}</a><span>故事在灯下继续。</span><a href="${slug ? feedUrl(slug) : '/feed.xml'}">RSS 订阅 ↗</a></footer>${settings()}</body></html>`;
 }
 function cover(slug: string, title: string, author?: string): string {
@@ -72,7 +113,7 @@ function readAction(slug: string, chapters: ChapterMeta[], preview = false, retu
 }
 function libraryPage(theme: string | null, params: URLSearchParams): string {
   const books = listBooks().map(slug => summarizeBook(slug, loadBookInfo(slug), live(slug)));
-  return layout(SITE_NAME, `${header(undefined, true)}<main id="main" class="wide catalogue-page">${renderCatalogue(books, shelfQuery(params), SITE_NAME, SITE_TAGLINE)}</main>`, theme);
+  return layout(SITE_NAME, `${header(undefined, true)}<main id="main" class="wide catalogue-page">${renderCatalogue(books, shelfQuery(params), SITE_NAME, SITE_TAGLINE)}</main>`, theme, undefined, SITE_DESCRIPTION, '/');
 }
 function chapterRows(slug: string, chapters: ChapterMeta[], current?: number, preview = false, returnTo = ''): string {
   return chapters.map((c, i) => `<a class="toc-row${c.n === current ? ' current' : ''}" data-chapter="${c.n}" href="${esc(chapterUrl(slug, c.n, preview, returnTo))}"${c.n === current ? ' aria-current="page"' : ''}><span class="toc-no">${String(c.n).padStart(2, '0')}</span><span class="toc-title">${esc(c.title)}</span><span class="chapter-label">${c.n === current ? '正在读' : c.status !== 'accepted' ? '草稿' : i === chapters.length - 1 ? '最新' : ''}</span><span class="toc-words">${words(c.wordCount)}</span></a>`).join('');
@@ -80,7 +121,7 @@ function chapterRows(slug: string, chapters: ChapterMeta[], current?: number, pr
 function tocPage(slug: string, theme: string | null, preview: boolean, returnTo = ''): string {
   const info = loadBookInfo(slug), chapters = preview ? listChapterMetas(slug) : live(slug), latest = chapters.at(-1);
   const synopsis = (info.synopsis ?? '').split('\n').filter(Boolean).map(p => `<p>${esc(p)}</p>`).join('');
-  return layout(info.title, `${header({ href: esc(returnTo || '/#library'), text: '返回书库' })}<main id="main" class="wide" data-book="${esc(slug)}">${preview ? '<div class="preview-banner">草稿预览 · 仅供内部查看</div>' : ''}<section class="book-detail"><div class="detail-cover">${cover(slug, info.title, info.author)}</div><div class="detail-copy"><p class="eyebrow">${esc(info.genre ?? '灯下藏书')} <span class="status-dot">${esc(info.status ?? '连载')}</span></p><h1>${esc(info.title)}</h1><p class="author">${esc(info.author ?? '')}</p>${info.tagline ? `<p class="book-tagline">${esc(info.tagline)}</p>` : ''}<div class="book-stats"><span><strong>${chapters.length}</strong> 章</span><span><strong>${words(chapters.reduce((sum, c) => sum + c.wordCount, 0))}</strong></span>${latest ? `<span>${date(latest.publishAt ?? latest.createdAt)} 更新</span>` : ''}</div><div class="book-actions">${readAction(slug, chapters, preview, returnTo)}${latest ? `<a class="button secondary" href="${esc(chapterUrl(slug, latest.n, preview, returnTo))}">看最新章</a>` : ''}</div>${synopsis ? `<details class="synopsis"><summary>作品简介 <span>展开 / 收起</span></summary><div>${synopsis}</div></details>` : ''}</div></section><section class="catalogue" id="catalogue" aria-labelledby="catalogue-title"><div class="section-heading"><div><h2 id="catalogue-title">章节目录 <span>共 ${chapters.length} 章</span></h2><p class="reading-note" data-reading-note>从第一页，走进故事。</p></div><button class="text-button" data-sort aria-pressed="false">倒序排列 ↓</button></div><div class="chapter-list" data-chapter-list>${chapterRows(slug, chapters, undefined, preview, returnTo) || '<div class="empty">第一章正在准备中。</div>'}</div></section><aside class="subscription compact"><div><h2>把故事留在订阅里</h2><p>使用 RSS 阅读器接收新章更新。</p></div><a class="button secondary" href="${feedUrl(slug)}">订阅本书 ↗</a></aside></main>`, theme, slug);
+  return layout(info.title, `${header({ href: esc(returnTo || '/#library'), text: '返回书库' })}<main id="main" class="wide" data-book="${esc(slug)}">${preview ? '<div class="preview-banner">草稿预览 · 仅供内部查看</div>' : ''}<section class="book-detail"><div class="detail-cover">${cover(slug, info.title, info.author)}</div><div class="detail-copy"><p class="eyebrow">${esc(info.genre ?? '灯下藏书')} <span class="status-dot">${esc(info.status ?? '连载')}</span></p><h1>${esc(info.title)}</h1><p class="author">${esc(info.author ?? '')}</p>${info.tagline ? `<p class="book-tagline">${esc(info.tagline)}</p>` : ''}<div class="book-stats"><span><strong>${chapters.length}</strong> 章</span><span><strong>${words(chapters.reduce((sum, c) => sum + c.wordCount, 0))}</strong></span>${latest ? `<span>${date(latest.publishAt ?? latest.createdAt)} 更新</span>` : ''}</div><div class="book-actions">${readAction(slug, chapters, preview, returnTo)}${latest ? `<a class="button secondary" href="${esc(chapterUrl(slug, latest.n, preview, returnTo))}">看最新章</a>` : ''}</div>${synopsis ? `<details class="synopsis"><summary>作品简介 <span>展开 / 收起</span></summary><div>${synopsis}</div></details>` : ''}</div></section><section class="catalogue" id="catalogue" aria-labelledby="catalogue-title"><div class="section-heading"><div><h2 id="catalogue-title">章节目录 <span>共 ${chapters.length} 章</span></h2><p class="reading-note" data-reading-note>从第一页，走进故事。</p></div><button class="text-button" data-sort aria-pressed="false">倒序排列 ↓</button></div><div class="chapter-list" data-chapter-list>${chapterRows(slug, chapters, undefined, preview, returnTo) || '<div class="empty">第一章正在准备中。</div>'}</div></section><aside class="subscription compact"><div><h2>把故事留在订阅里</h2><p>使用 RSS 阅读器接收新章更新。</p></div><a class="button secondary" href="${feedUrl(slug)}">订阅本书 ↗</a></aside></main>`, theme, slug, synopsis || info.tagline || SITE_DESCRIPTION, bookUrl(slug));
 }
 function chapterPage(slug: string, n: number, theme: string | null, preview: boolean, returnTo = ''): string | null {
   const chapters = preview ? listChapterMetas(slug) : live(slug);
@@ -90,7 +131,7 @@ function chapterPage(slug: string, n: number, theme: string | null, preview: boo
   const info = loadBookInfo(slug), index = chapters.findIndex(m => m.n === n), prev = chapters[index - 1], next = chapters[index + 1];
   const url = (no: number) => esc(chapterUrl(slug, no, preview, returnTo));
   const paragraphs = ch.body.split(/\n{2,}/).map(p => p.trim()).filter(Boolean).map(p => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('\n');
-  return layout(`${ch.meta.title} · ${info.title}`, `${header({ href: esc(bookUrl(slug, returnTo)), text: info.title })}<main id="main" class="reader-main" data-book="${esc(slug)}" data-chapter-number="${n}"${preview ? ' data-preview="true"' : ''}><aside class="desktop-rail"><button class="rail-button" data-open="directory" aria-haspopup="dialog">☷<span>目录</span></button><button class="rail-button" data-open="settings" aria-haspopup="dialog">Aa<span>设置</span></button><a class="rail-button" href="${esc(bookUrl(slug, returnTo))}">↗<span>书页</span></a></aside><article class="reading-page">${preview ? '<div class="preview-banner">草稿预览 · 仅供内部查看</div>' : ''}<header class="chapter-head"><a class="eyebrow" href="${esc(bookUrl(slug, returnTo))}">${esc(info.title)}</a><p class="chapter-no">第 ${n} 章 <span> / ${chapters.length}</span></p><h1>${esc(ch.meta.title)}</h1><p class="chapter-info">${words(ch.meta.wordCount)}<span>·</span>约 ${Math.max(1, Math.ceil(ch.meta.wordCount / 500))} 分钟</p><div class="chapter-ornament" aria-hidden="true">◆</div></header><div class="prose">${paragraphs}</div><section class="chapter-end" aria-label="章末导航"><span class="end-mark" aria-hidden="true">${lantern}</span>${next ? `<p>这一页读完，故事还在继续。</p><a class="button primary next-chapter" data-next href="${url(next.n)}"><span>下一章 <strong>${esc(next.title)}</strong></span><span aria-hidden="true">→</span></a>` : `<h2>已读到最新</h2><p>下次回来，接着读。</p><a class="button primary" href="${feedUrl(slug)}">订阅本书更新 ↗</a>`}<div class="end-links">${prev ? `<a data-prev href="${url(prev.n)}">← 上一章</a>` : '<span>这是第一章</span>'}<a href="${esc(bookUrl(slug, returnTo))}#catalogue">全部目录</a></div></section></article><div class="reading-toolbar" aria-label="阅读工具"><button data-open="directory" aria-haspopup="dialog">☷ <span>目录</span></button>${prev ? `<a href="${url(prev.n)}">← <span>上一章</span></a>` : '<span class="disabled">← 上一章</span>'}<button data-open="settings" aria-haspopup="dialog">Aa <span>设置</span></button>${next ? `<a href="${url(next.n)}"><span>下一章</span> →</a>` : '<span class="disabled">已到最新</span>'}<span class="reading-progress" role="progressbar" aria-label="本章阅读进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></div><dialog id="directory" class="directory panel" aria-labelledby="directory-title"><div class="panel-head"><div><span class="eyebrow">${esc(info.title)}</span><h2 id="directory-title">章节目录</h2></div><button class="icon-button" data-close aria-label="关闭目录">✕</button></div><div class="drawer-chapters">${chapterRows(slug, chapters, n, preview, returnTo)}</div><a class="drawer-footer" href="${esc(bookUrl(slug, returnTo))}">查看作品详情 ↗</a></dialog></main>`, theme, slug);
+  return layout(`${ch.meta.title} · ${info.title}`, `${header({ href: esc(bookUrl(slug, returnTo)), text: info.title })}<main id="main" class="reader-main" data-book="${esc(slug)}" data-chapter-number="${n}"${preview ? ' data-preview="true"' : ''}><aside class="desktop-rail"><button class="rail-button" data-open="directory" aria-haspopup="dialog">☷<span>目录</span></button><button class="rail-button" data-open="settings" aria-haspopup="dialog">Aa<span>设置</span></button><a class="rail-button" href="${esc(bookUrl(slug, returnTo))}">↗<span>书页</span></a></aside><article class="reading-page">${preview ? '<div class="preview-banner">草稿预览 · 仅供内部查看</div>' : ''}<header class="chapter-head"><a class="eyebrow" href="${esc(bookUrl(slug, returnTo))}">${esc(info.title)}</a><p class="chapter-no">第 ${n} 章 <span> / ${chapters.length}</span></p><h1>${esc(ch.meta.title)}</h1><p class="chapter-info">${words(ch.meta.wordCount)}<span>·</span>约 ${Math.max(1, Math.ceil(ch.meta.wordCount / 500))} 分钟</p><div class="chapter-ornament" aria-hidden="true">◆</div></header><div class="prose">${paragraphs}</div><section class="chapter-end" aria-label="章末导航"><span class="end-mark" aria-hidden="true">${lantern}</span>${next ? `<p>这一页读完，故事还在继续。</p><a class="button primary next-chapter" data-next href="${url(next.n)}"><span>下一章 <strong>${esc(next.title)}</strong></span><span aria-hidden="true">→</span></a>` : `<h2>已读到最新</h2><p>下次回来，接着读。</p><a class="button primary" href="${feedUrl(slug)}">订阅本书更新 ↗</a>`}<div class="end-links">${prev ? `<a data-prev href="${url(prev.n)}">← 上一章</a>` : '<span>这是第一章</span>'}<a href="${esc(bookUrl(slug, returnTo))}#catalogue">全部目录</a></div></section></article><div class="reading-toolbar" aria-label="阅读工具"><button data-open="directory" aria-haspopup="dialog">☷ <span>目录</span></button>${prev ? `<a href="${url(prev.n)}">← <span>上一章</span></a>` : '<span class="disabled">← 上一章</span>'}<button data-open="settings" aria-haspopup="dialog">Aa <span>设置</span></button>${next ? `<a href="${url(next.n)}"><span>下一章</span> →</a>` : '<span class="disabled">已到最新</span>'}<span class="reading-progress" role="progressbar" aria-label="本章阅读进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></div><dialog id="directory" class="directory panel" aria-labelledby="directory-title"><div class="panel-head"><div><span class="eyebrow">${esc(info.title)}</span><h2 id="directory-title">章节目录</h2></div><button class="icon-button" data-close aria-label="关闭目录">✕</button></div><div class="drawer-chapters">${chapterRows(slug, chapters, n, preview, returnTo)}</div><a class="drawer-footer" href="${esc(bookUrl(slug, returnTo))}">查看作品详情 ↗</a></dialog></main>`, theme, slug, `${info.title} 第 ${n} 章 ${ch.meta.title}`, chapterUrl(slug, n));
 }
 function feedXml(slug: string): string {
   const info = loadBookInfo(slug), chapters = live(slug).slice(-20).reverse();
