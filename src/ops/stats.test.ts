@@ -59,9 +59,34 @@ test('爬虫不计入来客', () => {
   assert.equal(dayStats(lines, now - 86400).visitors, 1);
 });
 
+test('同一本书 6 小时内读两章以上才算真人读者', () => {
+  const base = now - 3600;
+  const mk = (ip: string, uri: string, off: number) => ({
+    ts: base + off,
+    request: { remote_ip: ip, uri, headers: { 'User-Agent': ['Mozilla/5.0'], Referer: [] } },
+    status: 200,
+  });
+  // 60 秒读完一章：人
+  const human = dayStats([mk('a', '/b/x/1', 0), mk('a', '/b/x/2', 60), mk('b', '/b/x/1', 0)], now - 86400);
+  assert.equal(human.readers, 1);
+  // 2 秒翻一章：爬虫
+  const crawler = dayStats([mk('c', '/b/x/1', 0), mk('c', '/b/x/2', 2)], now - 86400);
+  assert.equal(crawler.readers, 0);
+});
+
+test('扫描器路径不计入访问', () => {
+  const s = dayStats(
+    [
+      { ts: now - 60, request: { remote_ip: 'bot', uri: '//xmlrpc.php', headers: { 'User-Agent': ['Mozilla/5.0'] } }, status: 200 },
+    ],
+    now - 86400,
+  );
+  assert.equal(s.visitors, 0);
+});
+
 test('报告包含三个数与漏斗', () => {
   const lines = [line('a', '/'), line('a', '/b/x/1')].map((l) => JSON.parse(l));
   const text = formatStats(dayStats(lines, now - 86400));
-  assert.match(text, /来客 1/);
+  assert.match(text, /来访 IP 1/);
   assert.match(text, /第3章到达/);
 });

@@ -116,7 +116,18 @@ function authorizedPreview(authorization: string | undefined): boolean {
   return expected.length === received.length && timingSafeEqual(expected, received);
 }
 const server = createServer((req, res) => {
-  const url = new URL(req.url ?? '/', 'http://localhost'), path = url.pathname;
+  const rawUrl = req.url ?? '/';
+
+  // 双斜杠开头的探测路径（//xmlrpc.php 之类）必须在 new URL 之前拦。
+  // 因为 '//xmlrpc.php' 会被当成协议相对地址解析：主机名变成 xmlrpc.php、
+  // 路径变成 '/'，于是这些探测请求全都掉进首页、返回 200，既污染统计又制造重复内容。
+  if (rawUrl.startsWith('//')) {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('404');
+    return;
+  }
+
+  const url = new URL(rawUrl, 'http://localhost'), path = url.pathname;
   const wantsPreview = url.searchParams.get('draft') === '1';
   const theme = url.searchParams.get('theme');
   const send = (status: number, body: string, type = 'text/html; charset=utf-8', cache?: string) => {

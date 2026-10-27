@@ -25,6 +25,15 @@ export interface LogLine {
 
 export interface DayStats {
   visitors: number;
+  /**
+   * 真人读者的估计。
+   *
+   * 口径：同一个 IP 在同一本书里，**相邻两次读章之间隔了 20 秒到 30 分钟**。
+   * 判据是「人的阅读速度」：一章 2500 字，人至少要几分钟；
+   * 爬虫是一秒一页地抓，间隔远小于 20 秒，所以会被排除。
+   * 这个数偏保守——但运营要看的是它，不是 visitors。
+   */
+  readers: number;
   pageviews: number;
   chaptersRead: number;
   /** 每章有多少独立 IP 读过（key 是 "slug/n"） */
@@ -35,7 +44,19 @@ export interface DayStats {
   funnels: Array<{ slug: string; c1: number; c3: number; c5: number; rate3: number }>;
 }
 
-const SKIP = [/^\/static\//, /^\/healthz$/, /^\/favicon/, /^\/robots\.txt$/, /^\/sitemap\.xml$/];
+// 扫描器最爱敲的门，不该算进访问数
+const SKIP = [
+  /^\/static\//,
+  /^\/healthz$/,
+  /^\/favicon/,
+  /^\/robots\.txt$/,
+  /^\/sitemap\.xml$/,
+  /^\/wp-/,
+  /xmlrpc/i,
+  /\.php$/i,
+  /^\/\./,
+  /^\/\//, // 双斜杠开头的探测路径
+];
 
 function parseLine(line: string): LogLine | null {
   const t = line.trim();
@@ -62,6 +83,7 @@ function isBot(ua: string): boolean {
 
 export function dayStats(lines: LogLine[], sinceMs: number): DayStats {
   const visitors = new Set<string>();
+  const readByBook = new Map<string, Map<string, number[]>>();
   const chapterReach = new Map<string, Set<string>>();
   const referrers = new Map<string, number>();
   const pages = new Map<string, number>();
@@ -93,6 +115,12 @@ export function dayStats(lines: LogLine[], sinceMs: number): DayStats {
       const set = chapterReach.get(key) ?? new Set<string>();
       set.add(ip);
       chapterReach.set(key, set);
+
+      const perBook = readByBook.get(m[1]!) ?? new Map<string, number[]>();
+      const times = perBook.get(ip) ?? [];
+      times.push(l.ts * 1000);
+      perBook.set(ip, times);
+      readByBook.set(m[1]!, perBook);
     }
 
     const ref = (l.request?.headers?.['Referer'] ?? [''])[0] ?? '';
@@ -126,8 +154,27 @@ export function dayStats(lines: LogLine[], sinceMs: number): DayStats {
   const sortDesc = (m: Map<string, number>) =>
     [...m.entries()].sort((a, b) => b[1] - a[1]);
 
+  // 相邻两章之间隔了 20 秒–30 分钟 → 这是人在读，不是机器在抓
+  const MIN_GAP = 20_000;
+  const MAX_GAP = 30 * 60_000;
+  let readers = 0;
+  for (const perBook of readByBook.values()) {
+    for (const times of perBook.values()) {
+      if (times.length < 2) continue;
+      times.sort((a, b) => a - b);
+      for (let i = 1; i < times.length; i++) {
+        const gap = times[i]! - times[i - 1]!;
+        if (gap >= MIN_GAP && gap <= MAX_GAP) {
+          readers++;
+          break;
+        }
+      }
+    }
+  }
+
   return {
     visitors: visitors.size,
+    readers,
     pageviews,
     chaptersRead,
     chapterReach,
@@ -142,7 +189,7 @@ export function formatStats(s: DayStats): string {
   const pct = (x: number) => `${Math.round(x * 100)}%`;
   const lines: string[] = [];
 
-  lines.push(`来客 ${s.visitors}　浏览 ${s.pageviews}　读章 ${s.chaptersRead}`);
+  lines.push(`真人读者 ${s.readers}　来访 IP ${s.visitors}　浏览 ${s.pageviews}`);
 
   if (s.funnels.length) {
     lines.push('');
