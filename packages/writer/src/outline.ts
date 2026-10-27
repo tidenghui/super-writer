@@ -12,7 +12,7 @@
  *
  * 人只负责两件事：定卷纲，和验收成品。
  */
-import { callLLM } from './llm.ts';
+import { callLLM, callJson } from './llm.ts';
 import { extractJson } from './json.ts';
 import { saveOutline, loadRules } from '../../contract/src/index.ts';
 import { proximityViolations } from './lint.ts';
@@ -83,7 +83,7 @@ async function draftBeat(
   const open = openPromises(book.bible.promises, n);
   const current = book.bible.outline.chapters.find((c) => c.n === n);
 
-  const res = await callLLM({
+  const beat = await callJson<ChapterBeat>({
     role: 'showrunner',
     system: `你是《${bookTitle(book)}》的策划。你写的是**章纲**，不是正文。
 
@@ -137,11 +137,11 @@ ${styleRules(book)}`,
       .filter(Boolean)
       .join('\n\n---\n\n'),
     json: true,
-    maxTokens: 4000,
+    maxTokens: 8000,
     label: `outline:${n}`,
   });
 
-  return extractJson<ChapterBeat>(res.text);
+  return beat;
 }
 
 /**
@@ -207,7 +207,7 @@ async function reviewBeat(
   n: number,
   beat: ChapterBeat,
 ): Promise<{ ok: boolean; issues: string[] }> {
-  const res = await callLLM({
+  const raw = await callJson<{ ok?: boolean; issues?: string[] }>({
     role: 'outlineReview',
     system: `你是这本书的责任编辑，只审章纲，**只拦硬伤**。
 
@@ -249,7 +249,6 @@ ${bookBriefing(book)}`,
     label: `outline-review:${n}`,
   });
 
-  const raw = extractJson<{ ok?: boolean; issues?: string[] }>(res.text);
   return { ok: raw.ok === true, issues: raw.issues ?? [] };
 }
 
