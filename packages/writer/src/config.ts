@@ -2,10 +2,11 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export { ROOT } from '../../contract/src/index.ts';
+// 根目录一律由契约层提供。
+// 这里曾经自己算过一次——搬家之后少了一层，模型配置直接找不到。
+import { ROOT } from '../../contract/src/index.ts';
+export { ROOT };
 export { bookDir } from '../../contract/src/index.ts';
-
-const ROOT_INTERNAL = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
  * 极简 .env 解析。
@@ -38,14 +39,14 @@ function parseEnvFile(path: string): Record<string, string> {
 
 export function loadEnv(): void {
   // .env 只补缺：不覆盖已经存在的变量
-  const base = resolve(ROOT_INTERNAL, '.env');
+  const base = resolve(ROOT, '.env');
   if (existsSync(base)) {
     for (const [k, v] of Object.entries(parseEnvFile(base))) {
       if (process.env[k] === undefined) process.env[k] = v;
     }
   }
   // .env.local 强制覆盖：它就是这台机器上这个项目的真相
-  const local = resolve(ROOT_INTERNAL, '.env.local');
+  const local = resolve(ROOT, '.env.local');
   if (existsSync(local)) {
     Object.assign(process.env, parseEnvFile(local));
   }
@@ -98,7 +99,7 @@ let cached: ModelCfgFile | null = null;
 export function modelConfig(): ModelCfgFile {
   if (!cached) {
     cached = JSON.parse(
-      readFileSync(resolve(ROOT_INTERNAL, 'config/models.json'), 'utf8'),
+      readFileSync(resolve(ROOT, 'config/models.json'), 'utf8'),
     ) as ModelCfgFile;
   }
   return cached;
@@ -144,7 +145,7 @@ export function resolveRole(role: Role): ResolvedRole {
   if (!apiKey) {
     throw new Error(
       `缺少 API key：环境变量 ${provider.apiKeyEnv} 未设置。\n` +
-        `请在 ${resolve(ROOT_INTERNAL, '.env.local')} 里填入（可从 .env.example 复制）。`,
+        `请在 ${resolve(ROOT, '.env.local')} 里填入（可从 .env.example 复制）。`,
     );
   }
 
@@ -186,4 +187,4 @@ function safe<T>(fn: () => T): T | null {
   }
 }
 
-export const runsDir = (slug: string) => resolve(ROOT_INTERNAL, 'runs', slug);
+export const runsDir = (slug: string) => resolve(ROOT, 'runs', slug);
