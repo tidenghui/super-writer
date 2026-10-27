@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayStats, formatStats, readLog } from './stats.ts';
+import { dayStats, formatStats, readLog, platformOf } from './stats.ts';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -89,4 +89,13 @@ test('报告包含三个数与漏斗', () => {
   const text = formatStats(dayStats(lines, now - 86400));
   assert.match(text, /来访 IP 1/);
   assert.match(text, /第3章到达/);
+});
+
+
+test('按 UA 认出小红书、微信、微博', () => {
+  assert.equal(platformOf('Mozilla/5.0 (iPhone) xhsdiscover/7.2'), '小红书');
+  assert.equal(platformOf('Mozilla/5.0 MicroMessenger/8.0'), '微信');
+  assert.equal(platformOf('Mozilla/5.0 Weibo/12.1'), '微博');
+  assert.equal(platformOf('Mozilla/5.0 (iPhone) Safari/605'), '浏览器');
+  assert.equal(platformOf(''), '其他');
 });

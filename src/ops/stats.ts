@@ -23,6 +23,26 @@ export interface LogLine {
   status?: number;
 }
 
+/**
+ * 从 UA 判断人是从哪来的。
+ *
+ * 小红书/微信/微博这些 App 的内置浏览器基本不带 Referer，
+ * 只能靠 UA 里的标记认。认不出来的时候宁可归到「直接访问」，
+ * 也不要瞎猜——错的分渠道比没有分渠道更误导人。
+ */
+export function platformOf(ua: string): string {
+  if (!ua) return '其他';
+  if (/MicroMessenger/i.test(ua)) return '微信';
+  if (/xiaohongshu|xhsdiscover|discover\/|XHS/i.test(ua)) return '小红书';
+  if (/Weibo/i.test(ua)) return '微博';
+  if (/Zhihu/i.test(ua)) return '知乎';
+  if (/Douban/i.test(ua)) return '豆瓣';
+  if (/Baidu|baiduboxapp/i.test(ua)) return '百度';
+  if (/QQ\//i.test(ua)) return 'QQ';
+  if (/iPhone|iPad|Android|Macintosh|Windows/i.test(ua)) return '浏览器';
+  return '其他';
+}
+
 export interface DayStats {
   visitors: number;
   /**
@@ -40,6 +60,10 @@ export interface DayStats {
   chapterReach: Map<string, Set<string>>;
   referrers: Array<[string, number]>;
   topPages: Array<[string, number]>;
+  /** 真人读者按来源平台分布 */
+  readerSources: Array<[string, number]>;
+  /** 全部来访（含只读一章的）按平台分布——发帖之后看这个最快 */
+  visitorSources: Array<[string, number]>;
   /** 按书的阅读漏斗：第1章 → 第3章 的到达率 */
   funnels: Array<{ slug: string; c1: number; c3: number; c5: number; rate3: number }>;
 }
@@ -84,6 +108,8 @@ function isBot(ua: string): boolean {
 export function dayStats(lines: LogLine[], sinceMs: number): DayStats {
   const visitors = new Set<string>();
   const readByBook = new Map<string, Map<string, number[]>>();
+  const readerPlatform = new Map<string, string>();
+  const visitorPlatform = new Map<string, string>();
   const chapterReach = new Map<string, Set<string>>();
   const referrers = new Map<string, number>();
   const pages = new Map<string, number>();
@@ -103,6 +129,7 @@ export function dayStats(lines: LogLine[], sinceMs: number): DayStats {
 
     pageviews++;
     visitors.add(ip);
+    visitorPlatform.set(ip, platformOf(ua));
 
     const path = uri.split('?')[0] ?? '';
     pages.set(path, (pages.get(path) ?? 0) + 1);
@@ -116,6 +143,7 @@ export function dayStats(lines: LogLine[], sinceMs: number): DayStats {
       set.add(ip);
       chapterReach.set(key, set);
 
+      readerPlatform.set(ip, platformOf(ua));
       const perBook = readByBook.get(m[1]!) ?? new Map<string, number[]>();
       const times = perBook.get(ip) ?? [];
       times.push(l.ts * 1000);
@@ -172,9 +200,34 @@ export function dayStats(lines: LogLine[], sinceMs: number): DayStats {
     }
   }
 
+  // 真人读者按来源平台聚合（一个 IP 只算一次）
+  const srcCount = new Map<string, number>();
+  for (const perBook of readByBook.values()) {
+    for (const [ip, times] of perBook) {
+      if (times.length < 2) continue;
+      times.sort((a, b) => a - b);
+      let human = false;
+      for (let i = 1; i < times.length; i++) {
+        const gap = times[i]! - times[i - 1]!;
+        if (gap >= 20_000 && gap <= 30 * 60_000) {
+          human = true;
+          break;
+        }
+      }
+      if (!human) continue;
+      const plat = readerPlatform.get(ip) ?? '其他';
+      srcCount.set(plat, (srcCount.get(plat) ?? 0) + 1);
+    }
+  }
+
+  const visCount = new Map<string, number>();
+  for (const plat of visitorPlatform.values()) visCount.set(plat, (visCount.get(plat) ?? 0) + 1);
+
   return {
     visitors: visitors.size,
     readers,
+    readerSources: [...srcCount.entries()].sort((a, b) => b[1] - a[1]),
+    visitorSources: [...visCount.entries()].sort((a, b) => b[1] - a[1]),
     pageviews,
     chaptersRead,
     chapterReach,
@@ -197,6 +250,18 @@ export function formatStats(s: DayStats): string {
     for (const f of s.funnels) {
       lines.push(`  ${f.slug.padEnd(10)} ${String(f.c1).padStart(3)} → ${String(f.c3).padStart(3)} → ${String(f.c5).padStart(3)}　第3章到达 ${pct(f.rate3)}`);
     }
+  }
+
+  if (s.visitorSources.length) {
+    lines.push('');
+    lines.push('来访从哪来（含只读一页的）');
+    for (const [name, n] of s.visitorSources) lines.push(`  ${name} ${n}`);
+  }
+
+  if (s.readerSources.length) {
+    lines.push('');
+    lines.push('真人读者从哪来');
+    for (const [name, n] of s.readerSources) lines.push(`  ${name} ${n}`);
   }
 
   if (s.referrers.length) {
