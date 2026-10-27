@@ -1,0 +1,11 @@
+{
+  "name": "@tidenghui/contract",
+  "version": "0.1.0",
+  "private": true,
+  "description": "一本书长什么样：类型、目录约定、读写。阅读器与写手唯一共享的一层。",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
