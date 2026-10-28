@@ -237,8 +237,93 @@ export function dayStats(lines: LogLine[], sinceMs: number): DayStats {
   };
 }
 
+export interface EventLine {
+  ts: number;
+  e: string;
+  slug: string;
+  n: number;
+  rid: string;
+  sid: string;
+}
+
+/**
+ * 阅读漏斗（来自 /e 的匿名事件）。
+ *
+ * 比访问日志准：它知道「点开了第几章」「读到章末了没有」「点了下一章没有」，
+ * 而日志只知道有人请求了这个 URL。
+ */
+export interface Funnel {
+  books: Array<{
+    slug: string;
+    opens: number;
+    starts: number;
+    completes: number;
+    nextClicks: number;
+    c1: number;
+    c3: number;
+    rate3: number;
+  }>;
+  readers: number;
+  sessions: number;
+}
+
+export function readEvents(path: string): EventLine[] {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, 'utf8')
+    .split('\n')
+    .map((l) => {
+      const t = l.trim();
+      if (!t.startsWith('{')) return null;
+      try {
+        return JSON.parse(t) as EventLine;
+      } catch {
+        return null;
+      }
+    })
+    .filter((x): x is EventLine => x !== null);
+}
+
+export function funnelStats(events: EventLine[], sinceMs: number): Funnel {
+  const recent = events.filter((e) => e.ts >= sinceMs);
+  const byBook = new Map<string, { opens: Set<string>; starts: Set<string>; completes: Set<string>; nextClicks: Set<string>; c1: Set<string>; c3: Set<string> }>();
+  const readers = new Set<string>();
+  const sessions = new Set<string>();
+
+  for (const e of recent) {
+    if (!e.slug) continue;
+    const b = byBook.get(e.slug) ?? { opens: new Set(), starts: new Set(), completes: new Set(), nextClicks: new Set(), c1: new Set(), c3: new Set() };
+    if (e.sid) sessions.add(e.sid);
+    if (e.rid) readers.add(e.rid);
+
+    if (e.e === 'book_open') b.opens.add(e.rid);
+    if (e.e === 'chapter_start') {
+      b.starts.add(e.rid);
+      if (e.n === 1) b.c1.add(e.rid);
+      if (e.n >= 3) b.c3.add(e.rid);
+    }
+    if (e.e === 'chapter_complete') b.completes.add(e.rid);
+    if (e.e === 'next_chapter_click') b.nextClicks.add(e.rid);
+    byBook.set(e.slug, b);
+  }
+
+  const books = [...byBook.entries()]
+    .map(([slug, b]) => ({
+      slug,
+      opens: b.opens.size,
+      starts: b.starts.size,
+      completes: b.completes.size,
+      nextClicks: b.nextClicks.size,
+      c1: b.c1.size,
+      c3: b.c3.size,
+      rate3: b.c1.size ? b.c3.size / b.c1.size : 0,
+    }))
+    .sort((a, b) => b.c1 - a.c1);
+
+  return { books, readers: readers.size, sessions: sessions.size };
+}
+
 /** 给终端看的短报告：三个数 + 漏斗 + 来源 */
-export function formatStats(s: DayStats): string {
+export function formatStats(s: DayStats, f?: Funnel): string {
   const pct = (x: number) => `${Math.round(x * 100)}%`;
   const lines: string[] = [];
 
@@ -249,6 +334,17 @@ export function formatStats(s: DayStats): string {
     lines.push('漏斗（第1章 → 第3章 → 第5章）');
     for (const f of s.funnels) {
       lines.push(`  ${f.slug.padEnd(10)} ${String(f.c1).padStart(3)} → ${String(f.c3).padStart(3)} → ${String(f.c5).padStart(3)}　第3章到达 ${pct(f.rate3)}`);
+    }
+  }
+
+  if (f) {
+    lines.push('');
+    lines.push('阅读漏斗（匿名事件，按本机 ID 去重）');
+    if (!f.books.length) lines.push('  （还没有事件）');
+    for (const b of f.books.slice(0, 8)) {
+      lines.push(
+        `  ${b.slug.padEnd(8)} 打开 ${String(b.opens).padStart(3)} · 开读 ${String(b.starts).padStart(3)} · 读完章末 ${String(b.completes).padStart(3)} · 点下一章 ${String(b.nextClicks).padStart(3)} · 第3章到达 ${Math.round(b.rate3 * 100)}%`,
+      );
     }
   }
 

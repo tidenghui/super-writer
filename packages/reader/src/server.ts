@@ -1,7 +1,7 @@
 /** File-backed, server-rendered reading platform. No build step or external assets. */
 import { createServer } from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listBooks, loadBookInfo, listChapterMetas, loadChapter, type ChapterMeta } from '../../contract/src/index.ts';
@@ -172,6 +172,52 @@ const server = createServer((req, res) => {
   }
 
   const url = new URL(rawUrl, 'http://localhost'), path = url.pathname;
+
+  // 匿名阅读事件。只收六种，只存时间、事件、书、章、匿名 ID。
+  // 不存 IP、不存 UA、不存 referer——只要漏斗，不要身份。
+  if (path === '/e' && req.method === 'POST') {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > 2048) {
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
+        const allowed = new Set([
+          'book_open',
+          'chapter_start',
+          'chapter_complete',
+          'next_chapter_click',
+          'share_click',
+        ]);
+        const ev = String(body.e ?? '');
+        if (allowed.has(ev)) {
+          const line = JSON.stringify({
+            ts: Date.now(),
+            e: ev,
+            slug: String(body.slug ?? '').slice(0, 40),
+            n: Number(body.n) || 0,
+            rid: String(body.rid ?? '').slice(0, 40),
+            sid: String(body.sid ?? '').slice(0, 40),
+          });
+          const dir = process.env.SW_DATA_DIR ?? resolve(bookDir('.'), '..', 'data');
+          mkdirSync(dir, { recursive: true });
+          appendFileSync(resolve(dir, 'events.jsonl'), line + '\n');
+        }
+      } catch {
+        /* 坏包直接丢，不打扰读者 */
+      }
+      res.writeHead(204, { 'cache-control': 'no-store' });
+      res.end();
+    });
+    return;
+  }
   const wantsPreview = url.searchParams.get('draft') === '1';
   const theme = url.searchParams.get('theme');
   const send = (status: number, body: string | Buffer, type = 'text/html; charset=utf-8', cache?: string) => {

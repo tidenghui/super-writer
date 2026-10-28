@@ -10,6 +10,48 @@
   const slug = main?.dataset.book;
   const chapter = Number(main?.dataset.chapterNumber);
   const preview = main?.dataset.preview === 'true';
+
+  // ── 匿名阅读事件 ──────────────────────────────────────────────
+  // 只回答「走到哪一步」，不认人：不存 IP、不存 UA、不存 referer。
+  // rid 是本机随机 ID（清缓存即重置），sid 30 分钟无操作就换新的。
+  const rid = (() => {
+    let v = get('sw:rid');
+    if (!v) { v = Math.random().toString(36).slice(2) + Date.now().toString(36); set('sw:rid', v); }
+    return v;
+  })();
+  const sid = (() => {
+    const now = Date.now();
+    const last = Number(get('sw:sidAt') || 0);
+    let v = get('sw:sid');
+    if (!v || now - last > 30 * 60 * 1000) { v = Math.random().toString(36).slice(2) + now.toString(36); set('sw:sid', v); }
+    set('sw:sidAt', now);
+    return v;
+  })();
+  function track(e, n) {
+    if (preview) return; // 草稿预览不计入
+    const payload = JSON.stringify({ e, slug: slug || '', n: n || 0, rid, sid });
+    try {
+      if (navigator.sendBeacon) { navigator.sendBeacon('/e', new Blob([payload], { type: 'application/json' })); return; }
+      fetch('/e', { method: 'POST', body: payload, headers: { 'content-type': 'application/json' }, keepalive: true });
+    } catch {}
+  }
+  if (slug) {
+    if (Number.isFinite(chapter) && chapter > 0) track('chapter_start', chapter);
+    else track('book_open');
+  }
+
+  const endMark = $('.chapter-end');
+  if (endMark && Number.isFinite(chapter) && chapter > 0 && 'IntersectionObserver' in window) {
+    let done = false;
+    new IntersectionObserver((entries) => {
+      if (done) return;
+      if (entries.some((x) => x.isIntersecting)) { done = true; track('chapter_complete', chapter); }
+    }, { threshold: 0.6 }).observe(endMark);
+  }
+
+  all('[data-next]').forEach((a) => a.addEventListener('click', () => track('next_chapter_click', chapter)));
+  all('a[href^="/feed.xml"]').forEach((a) => a.addEventListener('click', () => track('share_click', chapter)));
+
   let opener;
   const dialogOpen = () => !!$('dialog[open]');
   function syncSettings() {

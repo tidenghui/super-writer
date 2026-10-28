@@ -9,7 +9,7 @@ import { isMock } from '../packages/writer/src/mock.ts';
 import { expandOutline } from '../packages/writer/src/outline.ts';
 import { createBook } from '../packages/writer/src/genesis.ts';
 import { produceBook } from '../packages/writer/src/batch.ts';
-import { readLog, dayStats, formatStats } from '../packages/reader/src/ops/stats.ts';
+import { readLog, dayStats, formatStats, readEvents, funnelStats } from '../packages/reader/src/ops/stats.ts';
 import { readFileSync } from 'node:fs';
 import { enableCallLog } from '../packages/writer/src/util.ts';
 import { callLLM } from '../packages/writer/src/llm.ts';
@@ -200,9 +200,11 @@ async function cmdStats(): Promise<void> {
   const file = flag('file') ?? '/var/log/caddy/super-writer.log';
   const hours = Number(flag('hours') ?? 24);
   const lines = readLog(file);
-  const s = dayStats(lines, Date.now() - hours * 3600_000);
+  const since = Date.now() - hours * 3600_000;
+  const s = dayStats(lines, since);
+  const f = funnelStats(readEvents(flag('events') ?? '/opt/super-writer/data/events.jsonl'), since);
   console.log(`\n  最近 ${hours} 小时\n`);
-  console.log(formatStats(s).replace(/^/gm, '  '));
+  console.log(formatStats(s, f).replace(/^/gm, '  '));
   console.log('');
 }
 
