@@ -55,5 +55,10 @@ echo "→ 补权限"
 # sudo rsync 写出来的文件属主是 root，必须还给运行用户，否则 sw 读不了代码
 ssh $SSH_OPTS "$HOST" "sudo chown -R sw:sw $DEST && sudo chmod 600 $DEST/.env.local && sudo chmod +x $DEST/deploy/*.sh" || true
 
-echo "→ 完成。接下来在服务器上跑："
+echo "→ 重启阅读器"
+# 只拷文件不重启，进程会一直跑旧代码——曾经因此让 canonical 全是 127.0.0.1。
+ssh $SSH_OPTS "$HOST" "sudo systemctl restart super-writer-reader" || true
+ssh $SSH_OPTS "$HOST" "systemctl is-active super-writer-reader" || true
+
+echo "→ 完成。服务已重启；systemd 单元有改动时才需要："
 echo "     sudo bash $DEST/deploy/install.sh"
