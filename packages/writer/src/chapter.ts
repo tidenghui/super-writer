@@ -13,6 +13,7 @@ import {
   normalizeQuotes,
   proximityViolations,
   repeatedExplaining,
+  explanatoryViolations,
 } from './lint.ts';
 import {
   bookBriefing,

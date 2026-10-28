@@ -9,7 +9,17 @@
  */
 
 export interface Violation {
-  kind: '禁用词' | '失声' | '长句' | '情绪直陈' | '越界' | '引号' | '人称' | '串味' | '重复';
+  kind:
+    | '禁用词'
+    | '失声'
+    | '长句'
+    | '情绪直陈'
+    | '越界'
+    | '引号'
+    | '人称'
+    | '串味'
+    | '重复'
+    | '解释';
   /** 命中的词或规则说明 */
   rule: string;
   /** 原文里出问题的句子 */
@@ -379,6 +389,41 @@ export function repeatedExplaining(body: string): Violation[] {
     }
   }
   return out.slice(0, 3);
+}
+
+/**
+ * 解释性句子。
+ *
+ * 批评家最高频的一类硬伤是「替读者解释」——774 条，比任何一类都多。
+ * 它不是文笔差，是叙述者在替读者下结论：读者已经看见了，还要被告知一遍。
+ *
+ * 这些句式是可判定的，而且判得准：它们几乎总是「把画面翻译成结论」。
+ */
+const EXPLAIN_PATTERNS: Array<{ re: RegExp; why: string }> = [
+  { re: /他(这才)?(意识到|明白过来|明白了|懂了|这才懂)/, why: '替角色下结论' },
+  { re: /她(这才)?(意识到|明白过来|明白了|懂了|这才懂)/, why: '替角色下结论' },
+  { re: /这意味着|也就是说|换句话说|等于说|这说明/, why: '替读者翻译' },
+  { re: /(原因|道理)很简单/, why: '直接讲解' },
+  { re: /他(知道|清楚)这(意味着|代表)/, why: '替读者翻译' },
+];
+
+export function explanatoryViolations(body: string): Violation[] {
+  const out: Violation[] = [];
+  for (const para of body.split(/\n{2,}/)) {
+    const text = para.trim();
+    if (!text) continue;
+    for (const { re, why } of EXPLAIN_PATTERNS) {
+      const m = text.match(re);
+      if (m) {
+        out.push({
+          kind: '解释',
+          rule: `${why}：「${m[0]}」——把已经写出来的画面再翻译一遍`,
+          sentence: text.slice(0, 70),
+        });
+      }
+    }
+  }
+  return out.slice(0, 4);
 }
 
 export function repetitionWarnings(body: string): string[] {
